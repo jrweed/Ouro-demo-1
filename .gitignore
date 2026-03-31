@@ -1,0 +1,27 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+venv/
+.venv/
+
+# matching-service local data store
+matching-service/data/store.json
+
+# Node (covered by coldhual/.gitignore too, but belt-and-suspenders)
+node_modules/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo

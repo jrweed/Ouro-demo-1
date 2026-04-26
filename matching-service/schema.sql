@@ -1,5 +1,5 @@
 -- =============================================================================
--- ColdHaul Matching Algorithm — Supabase Postgres Schema
+-- Spoke Matching Algorithm — Supabase Postgres Schema
 -- =============================================================================
 -- Run this migration in the Supabase SQL editor when the project is created.
 -- TODO(supabase): Execute this file via Supabase Dashboard → SQL Editor → New Query
@@ -7,6 +7,18 @@
 
 -- Enable UUID generation
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- =============================================================================
+-- PROFILES (unified auth table — supports 3pl, carrier, driver, admin roles)
+-- =============================================================================
+-- NOTE: When using Supabase Auth, this table links to auth.users via id.
+-- The 'driver' role and parent_carrier_id are reserved for Phase 2 mobile app.
+-- CREATE TABLE profiles (
+--     id                UUID PRIMARY KEY REFERENCES auth.users(id),
+--     role              TEXT NOT NULL CHECK (role IN ('3pl', 'carrier', 'driver', 'admin')),
+--     parent_carrier_id UUID REFERENCES profiles(id),  -- driver→carrier link (Phase 2)
+--     created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+-- );
 
 -- =============================================================================
 -- BROKERS
@@ -79,16 +91,38 @@ CREATE TABLE carriers (
 );
 
 -- =============================================================================
+-- DRIVERS (referenced by future tables — TMS Pro, Year 2)
+-- =============================================================================
+CREATE TABLE drivers (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    carrier_id      UUID NOT NULL REFERENCES carriers(id) ON DELETE CASCADE,
+    first_name      TEXT NOT NULL,
+    last_name       TEXT NOT NULL,
+    email           TEXT,
+    phone           TEXT,
+    cdl_number      TEXT,
+    cdl_state       TEXT,
+    cdl_expiry      DATE,
+    status          TEXT NOT NULL DEFAULT 'active'
+        CHECK (status IN ('active', 'inactive', 'terminated')),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_drivers_carrier ON drivers(carrier_id);
+
+-- =============================================================================
 -- TRUCKS
 -- =============================================================================
 CREATE TABLE trucks (
     id                          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     carrier_id                  UUID NOT NULL REFERENCES carriers(id) ON DELETE CASCADE,
     unit_number                 TEXT NOT NULL,
-    equipment_type              TEXT NOT NULL,
+    equipment_type              TEXT NOT NULL
+        CHECK (equipment_type IN ('dry_van', 'flatbed', 'step_deck', 'reefer_single', 'reefer_multi', 'tanker', 'lowboy', 'hotshot', 'box_truck', 'power_only', 'other')),
     max_payload_lbs             INTEGER NOT NULL,
-    temp_capability_min         INTEGER NOT NULL,
-    temp_capability_max         INTEGER NOT NULL,
+    temp_capability_min         INTEGER,  -- nullable: only relevant for reefer equipment
+    temp_capability_max         INTEGER,  -- nullable: only relevant for reefer equipment
     current_load_status         TEXT NOT NULL DEFAULT 'available'
         CHECK (current_load_status IN ('available', 'on_load', 'maintenance', 'inactive')),
     current_location_city       TEXT,
@@ -113,8 +147,9 @@ CREATE TABLE loads (
 
     -- Commodity and temperature
     commodity_type              TEXT NOT NULL,
-    required_temp_min           INTEGER NOT NULL,
-    required_temp_max           INTEGER NOT NULL,
+    commodity_category          TEXT,  -- 'produce', 'frozen', 'dairy', 'dry_goods', 'industrial', 'hazmat', 'general', 'other'
+    required_temp_min           INTEGER,  -- nullable: only required for reefer loads
+    required_temp_max           INTEGER,  -- nullable: only required for reefer loads
 
     -- Equipment requirements
     required_equipment_types    TEXT[] NOT NULL DEFAULT '{}',
@@ -264,30 +299,24 @@ RETURNS JSON AS $$
 DECLARE
     v_load loads%ROWTYPE;
 BEGIN
-    -- Lock the load row — SKIP LOCKED means concurrent attempts return immediately
     SELECT * INTO v_load FROM loads
     WHERE id = p_load_id AND status = 'open'
     FOR UPDATE SKIP LOCKED;
 
-    -- If no row returned, load was already claimed or locked by another transaction
     IF NOT FOUND THEN
         RETURN json_build_object('success', false, 'reason', 'load_already_claimed');
     END IF;
 
-    -- Claim the load
     UPDATE loads SET status = 'covered', updated_at = now() WHERE id = p_load_id;
 
-    -- Mark carrier as on_load
     UPDATE carrier_availability
     SET status = 'on_load', current_load_id = p_load_id, updated_at = now()
     WHERE carrier_id = p_carrier_id;
 
-    -- Expire all other pending notifications for this load
     UPDATE match_notifications
     SET status = 'backfilled', responded_at = now()
     WHERE load_id = p_load_id AND carrier_id != p_carrier_id AND status = 'pending';
 
-    -- Mark the accepting carrier's notification as accepted
     UPDATE match_notifications
     SET status = 'accepted', responded_at = now()
     WHERE load_id = p_load_id AND carrier_id = p_carrier_id;
@@ -311,3 +340,86 @@ CREATE TRIGGER trg_brokers_updated    BEFORE UPDATE ON brokers             FOR E
 CREATE TRIGGER trg_carriers_updated   BEFORE UPDATE ON carriers            FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 CREATE TRIGGER trg_trucks_updated     BEFORE UPDATE ON trucks              FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 CREATE TRIGGER trg_loads_updated      BEFORE UPDATE ON loads               FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+CREATE TRIGGER trg_drivers_updated    BEFORE UPDATE ON drivers             FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- =============================================================================
+-- FUTURE-PROOF TABLES (TMS Pro, Year 2) — No UI yet, schema only
+-- =============================================================================
+
+-- Vehicle maintenance tracking
+CREATE TABLE truck_maintenance_logs (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    truck_id          UUID NOT NULL REFERENCES trucks(id),
+    maintenance_type  TEXT NOT NULL,  -- 'oil_change', 'tire_rotation', 'reefer_service', 'brake_inspection', 'dot_inspection', 'other'
+    description       TEXT,
+    cost              NUMERIC,
+    performed_at      DATE NOT NULL,
+    next_due_date     DATE,
+    next_due_miles    NUMERIC,
+    vendor_name       TEXT,
+    created_at        TIMESTAMPTZ DEFAULT now()
+);
+
+-- Driver document management
+CREATE TABLE driver_documents (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    driver_id       UUID NOT NULL REFERENCES drivers(id),
+    doc_type        TEXT NOT NULL,  -- 'cdl', 'medical_card', 'drug_test', 'mvr', 'insurance', 'other'
+    file_url        TEXT,
+    issued_date     DATE,
+    expiration_date DATE,
+    is_current      BOOLEAN DEFAULT TRUE,
+    created_at      TIMESTAMPTZ DEFAULT now()
+);
+
+-- Temperature logs for reefer loads
+CREATE TABLE temperature_logs (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    load_id         UUID REFERENCES loads(id),
+    truck_id        UUID REFERENCES trucks(id),
+    recorded_at     TIMESTAMPTZ NOT NULL,
+    temperature     NUMERIC NOT NULL,  -- °F
+    threshold_min   NUMERIC,
+    threshold_max   NUMERIC,
+    is_excursion    BOOLEAN DEFAULT FALSE,
+    created_at      TIMESTAMPTZ DEFAULT now()
+);
+
+-- Fuel transactions
+CREATE TABLE fuel_transactions (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    truck_id          UUID NOT NULL REFERENCES trucks(id),
+    driver_id         UUID REFERENCES drivers(id),
+    gallons           NUMERIC NOT NULL,
+    cost_total        NUMERIC NOT NULL,
+    cost_per_gallon   NUMERIC,
+    location_name     TEXT,
+    location_city     TEXT,
+    location_state    TEXT,
+    transaction_date  TIMESTAMPTZ NOT NULL,
+    created_at        TIMESTAMPTZ DEFAULT now()
+);
+
+-- Driver settlements
+CREATE TABLE settlements (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    carrier_id        UUID NOT NULL REFERENCES carriers(id),
+    driver_id         UUID NOT NULL REFERENCES drivers(id),
+    period_start      DATE NOT NULL,
+    period_end        DATE NOT NULL,
+    total_loads       INTEGER,
+    gross_revenue     NUMERIC,
+    fuel_deductions   NUMERIC,
+    other_deductions  NUMERIC,
+    net_pay           NUMERIC,
+    status            TEXT DEFAULT 'draft' CHECK (status IN ('draft', 'approved', 'paid')),
+    created_at        TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_maintenance_truck    ON truck_maintenance_logs(truck_id);
+CREATE INDEX idx_maintenance_next_due ON truck_maintenance_logs(next_due_date);
+CREATE INDEX idx_driver_docs_driver   ON driver_documents(driver_id);
+CREATE INDEX idx_driver_docs_expiry   ON driver_documents(expiration_date);
+CREATE INDEX idx_temp_logs_load       ON temperature_logs(load_id);
+CREATE INDEX idx_fuel_truck           ON fuel_transactions(truck_id);
+CREATE INDEX idx_settlements_carrier  ON settlements(carrier_id);

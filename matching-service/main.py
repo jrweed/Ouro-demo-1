@@ -1,5 +1,5 @@
 """
-ColdHaul Matching Algorithm — FastAPI Service
+Spoke Matching Algorithm — FastAPI Service
 
 TODO(supabase): Replace local data store calls with Supabase client
 TODO(railway): Deploy this service to Railway with env vars configured
@@ -23,7 +23,7 @@ from db.local import accept_load_atomic, get_all, get_by_id, insert_rows, update
 from matching.ranker import run_matching_pipeline
 
 app = FastAPI(
-    title="ColdHaul Matching Service",
+    title="Spoke Matching Service",
     version="0.1.0",
     description="Broadcast matching algorithm for cold chain freight",
 )
@@ -64,7 +64,7 @@ class AcceptRequest(BaseModel):
 @app.get("/api/v1/health")
 async def health():
     """Railway health check endpoint."""
-    return {"status": "ok", "service": "coldhual-matching"}
+    return {"status": "ok", "service": "spoke-matching"}
 
 
 @app.post("/api/v1/match")

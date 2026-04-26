@@ -17,7 +17,7 @@ venv/
 # matching-service local data store
 matching-service/data/store.json
 
-# Node (covered by coldhual/.gitignore too, but belt-and-suspenders)
+# Node (covered by spoke/.gitignore too, but belt-and-suspenders)
 node_modules/
 
 # IDE

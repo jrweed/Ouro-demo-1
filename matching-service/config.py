@@ -1,5 +1,5 @@
 """
-Environment variable loading for ColdHaul matching service.
+Environment variable loading for Spoke matching service.
 """
 
 import os

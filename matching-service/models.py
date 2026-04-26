@@ -1,5 +1,5 @@
 """
-Pydantic models for ColdHaul matching service.
+Pydantic models for Spoke matching service.
 """
 
 from __future__ import annotations

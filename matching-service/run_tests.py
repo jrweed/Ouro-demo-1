@@ -1,5 +1,5 @@
 """
-ColdHaul Matching Algorithm — Test Runner
+Spoke Matching Algorithm — Test Runner
 
 Executes all 5 test scenarios from TEST_DATA.md and validates expected outcomes.
 Re-seeds the database before each run to ensure reproducible results.
@@ -287,7 +287,7 @@ def check_assertions(assertions: list, top_k: list, rejections: list) -> list:
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
-    print_header("ColdHaul Matching Algorithm — Test Runner", "█")
+    print_header("Spoke Matching Algorithm — Test Runner", "█")
     print(f"  Test time (fixed): {TEST_NOW.isoformat()}")
     print(f"  Seeding database...\n")
 

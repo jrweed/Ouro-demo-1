@@ -1,5 +1,5 @@
 """
-Seed script for ColdHaul matching algorithm test data.
+Seed script for Spoke matching algorithm test data.
 Inserts all records from TEST_DATA.md using exact UUIDs.
 Wipes existing data before inserting.
 
@@ -156,7 +156,7 @@ def seed():
             "id": "c3000000-0000-0000-0000-000000000003",
             "company_name": "Sunbelt Cold Haul Inc",
             "contact_name": "Andre Baptiste",
-            "email": "dispatch@sunbeltcoldhaul.com",
+            "email": "dispatch@sunbeltspoke.com",
             "phone": "305-555-0333",
             "city": "Miami",
             "state": "FL",

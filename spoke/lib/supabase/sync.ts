@@ -228,6 +228,45 @@ export async function syncCarriersFromSupabase(): Promise<void> {
   }
 }
 
+// ─── FLEET (carrier trucks & drivers) ─────────────────────────────────────────
+
+export async function syncFleetFromSupabase(): Promise<void> {
+  const { data: trucks, error: e1 } = await supabase().from("fleet_trucks").select("*").order("truck_num");
+  if (!e1 && trucks && trucks.length > 0) {
+    const mapped = trucks.map((r: Record<string, unknown>) => ({
+      id: r.id,
+      truckNum: r.truck_num || "",
+      year: r.year,
+      make: r.make || "",
+      model: r.model || "",
+      equipmentType: r.equipment_type || "",
+      status: r.status || "available",
+      city: r.city || "",
+      state: r.state || "",
+      notes: r.notes || "",
+      createdAt: r.created_at || "",
+    }));
+    sessionStorage.setItem("ch_trucks", JSON.stringify(mapped));
+  }
+
+  const { data: drivers, error: e2 } = await supabase().from("fleet_drivers").select("*").order("name");
+  if (!e2 && drivers && drivers.length > 0) {
+    const mapped = drivers.map((r: Record<string, unknown>) => ({
+      id: r.id,
+      name: r.name || "",
+      phone: r.phone || "",
+      cdlNumber: r.cdl_number || "",
+      cdlExpiry: r.cdl_expiry || "",
+      status: r.status || "active",
+      assignedTruckId: r.assigned_truck_id || null,
+      homeCity: r.home_city || "",
+      homeState: r.home_state || "",
+      createdAt: r.created_at || "",
+    }));
+    sessionStorage.setItem("ch_drivers", JSON.stringify(mapped));
+  }
+}
+
 // ─── MASTER SYNC — call once on app load ──────────────────────────────────────
 
 export async function syncAllFromSupabase(): Promise<void> {
@@ -239,6 +278,7 @@ export async function syncAllFromSupabase(): Promise<void> {
     syncInvoicesFromSupabase(),
     syncNotificationsFromSupabase(),
     syncCarriersFromSupabase(),
+    syncFleetFromSupabase(),
   ]);
   console.log("[sync] Complete.");
 }

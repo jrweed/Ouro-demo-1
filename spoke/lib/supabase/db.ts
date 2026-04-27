@@ -472,6 +472,143 @@ export async function markAllNotificationsRead(): Promise<void> {
   check(result, "markAllNotificationsRead");
 }
 
+// ─── FLEET TRUCKS ────────────────────────────────────────────────────────────
+
+export interface DbFleetTruck {
+  id: string;
+  truckNum: string;
+  year: number | null;
+  make: string;
+  model: string;
+  equipmentType: string;
+  status: string;
+  city: string;
+  state: string;
+  notes: string;
+  createdAt: string;
+}
+
+function fleetTruckToRow(t: DbFleetTruck): Record<string, unknown> {
+  return {
+    id: t.id, truck_num: t.truckNum, year: t.year, make: t.make, model: t.model,
+    equipment_type: t.equipmentType, status: t.status, city: t.city, state: t.state,
+    notes: t.notes, created_at: t.createdAt,
+  };
+}
+
+function rowToFleetTruck(r: Record<string, unknown>): DbFleetTruck {
+  return {
+    id: r.id as string,
+    truckNum: (r.truck_num as string) || "",
+    year: r.year as number | null,
+    make: (r.make as string) || "",
+    model: (r.model as string) || "",
+    equipmentType: (r.equipment_type as string) || "",
+    status: (r.status as string) || "available",
+    city: (r.city as string) || "",
+    state: (r.state as string) || "",
+    notes: (r.notes as string) || "",
+    createdAt: (r.created_at as string) || "",
+  };
+}
+
+export async function getFleetTrucks(): Promise<DbFleetTruck[]> {
+  const { data } = await supabase().from("fleet_trucks").select("*").order("truck_num");
+  return (data || []).map(rowToFleetTruck);
+}
+
+export async function insertFleetTruck(t: DbFleetTruck): Promise<void> {
+  const result = await supabase().from("fleet_trucks").insert(fleetTruckToRow(t));
+  check(result, "insertFleetTruck");
+}
+
+export async function updateFleetTruck(id: string, updates: Partial<DbFleetTruck>): Promise<void> {
+  const row: Record<string, unknown> = {};
+  if (updates.truckNum !== undefined) row.truck_num = updates.truckNum;
+  if (updates.year !== undefined) row.year = updates.year;
+  if (updates.make !== undefined) row.make = updates.make;
+  if (updates.model !== undefined) row.model = updates.model;
+  if (updates.equipmentType !== undefined) row.equipment_type = updates.equipmentType;
+  if (updates.status !== undefined) row.status = updates.status;
+  if (updates.city !== undefined) row.city = updates.city;
+  if (updates.state !== undefined) row.state = updates.state;
+  if (updates.notes !== undefined) row.notes = updates.notes;
+  const result = await supabase().from("fleet_trucks").update(row).eq("id", id);
+  check(result, "updateFleetTruck");
+}
+
+export async function deleteFleetTruck(id: string): Promise<void> {
+  const result = await supabase().from("fleet_trucks").delete().eq("id", id);
+  check(result, "deleteFleetTruck");
+}
+
+// ─── FLEET DRIVERS ───────────────────────────────────────────────────────────
+
+export interface DbFleetDriver {
+  id: string;
+  name: string;
+  phone: string;
+  cdlNumber: string;
+  cdlExpiry: string;
+  status: string;
+  assignedTruckId: string | null;
+  homeCity: string;
+  homeState: string;
+  createdAt: string;
+}
+
+function fleetDriverToRow(d: DbFleetDriver): Record<string, unknown> {
+  return {
+    id: d.id, name: d.name, phone: d.phone, cdl_number: d.cdlNumber,
+    cdl_expiry: d.cdlExpiry, status: d.status, assigned_truck_id: d.assignedTruckId,
+    home_city: d.homeCity, home_state: d.homeState, created_at: d.createdAt,
+  };
+}
+
+function rowToFleetDriver(r: Record<string, unknown>): DbFleetDriver {
+  return {
+    id: r.id as string,
+    name: (r.name as string) || "",
+    phone: (r.phone as string) || "",
+    cdlNumber: (r.cdl_number as string) || "",
+    cdlExpiry: (r.cdl_expiry as string) || "",
+    status: (r.status as string) || "active",
+    assignedTruckId: (r.assigned_truck_id as string) || null,
+    homeCity: (r.home_city as string) || "",
+    homeState: (r.home_state as string) || "",
+    createdAt: (r.created_at as string) || "",
+  };
+}
+
+export async function getFleetDrivers(): Promise<DbFleetDriver[]> {
+  const { data } = await supabase().from("fleet_drivers").select("*").order("name");
+  return (data || []).map(rowToFleetDriver);
+}
+
+export async function insertFleetDriver(d: DbFleetDriver): Promise<void> {
+  const result = await supabase().from("fleet_drivers").insert(fleetDriverToRow(d));
+  check(result, "insertFleetDriver");
+}
+
+export async function updateFleetDriver(id: string, updates: Partial<DbFleetDriver>): Promise<void> {
+  const row: Record<string, unknown> = {};
+  if (updates.name !== undefined) row.name = updates.name;
+  if (updates.phone !== undefined) row.phone = updates.phone;
+  if (updates.cdlNumber !== undefined) row.cdl_number = updates.cdlNumber;
+  if (updates.cdlExpiry !== undefined) row.cdl_expiry = updates.cdlExpiry;
+  if (updates.status !== undefined) row.status = updates.status;
+  if (updates.assignedTruckId !== undefined) row.assigned_truck_id = updates.assignedTruckId;
+  if (updates.homeCity !== undefined) row.home_city = updates.homeCity;
+  if (updates.homeState !== undefined) row.home_state = updates.homeState;
+  const result = await supabase().from("fleet_drivers").update(row).eq("id", id);
+  check(result, "updateFleetDriver");
+}
+
+export async function deleteFleetDriver(id: string): Promise<void> {
+  const result = await supabase().from("fleet_drivers").delete().eq("id", id);
+  check(result, "deleteFleetDriver");
+}
+
 // ─── CARRIERS (for matching) ──────────────────────────────────────────────────
 
 export async function getCarriers(): Promise<Record<string, unknown>[]> {

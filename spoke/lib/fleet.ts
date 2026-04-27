@@ -1,20 +1,17 @@
 /**
- * Fleet management — trucks and drivers, sessionStorage-backed for the demo.
- *
- * TODO: Replace with Supabase:
- *   Tables:
- *     trucks (id, carrier_id, truck_num, year, make, model, equipment_type,
- *             status, city, state, notes, created_at)
- *     drivers (id, carrier_id, name, phone, cdl_number, cdl_expiry,
- *              status, assigned_truck_id, home_city, home_state, created_at)
- *
- *   Write:  INSERT INTO trucks (...) VALUES (...)
- *   Read:   SELECT * FROM trucks WHERE carrier_id = auth.uid() ORDER BY truck_num
- *   Update: UPDATE trucks SET ... WHERE id = $id AND carrier_id = auth.uid()
- *   Delete: DELETE FROM trucks WHERE id = $id AND carrier_id = auth.uid()
+ * Fleet management — trucks and drivers.
+ * sessionStorage for instant reads + Supabase write-through for persistence.
  */
 
 import { TRUCK_STATUSES } from "@/lib/utils/constants";
+import {
+  insertFleetTruck as dbInsertTruck,
+  updateFleetTruck as dbUpdateTruck,
+  deleteFleetTruck as dbDeleteTruck,
+  insertFleetDriver as dbInsertDriver,
+  updateFleetDriver as dbUpdateDriver,
+  deleteFleetDriver as dbDeleteDriver,
+} from "./supabase/db";
 
 export type TruckStatus = (typeof TRUCK_STATUSES)[number];
 export type DriverStatus = "active" | "inactive" | "on_leave";
@@ -212,6 +209,7 @@ export function createTruck(data: Omit<Truck, "id" | "createdAt">): Truck {
     createdAt: new Date().toISOString(),
   };
   saveTrucks([...getTrucks(), truck]);
+  dbInsertTruck(truck).catch(console.error);
   return truck;
 }
 
@@ -222,15 +220,23 @@ export function updateTruck(id: string, data: Partial<Omit<Truck, "id" | "create
   const updated = { ...trucks[idx], ...data };
   trucks[idx] = updated;
   saveTrucks(trucks);
+  dbUpdateTruck(id, data).catch(console.error);
   return updated;
 }
 
 export function deleteTruck(id: string): void {
   saveTrucks(getTrucks().filter((t) => t.id !== id));
   // Unassign any driver assigned to this truck
-  saveDrivers(getDrivers().map((d) =>
+  const drivers = getDrivers();
+  drivers.forEach((d) => {
+    if (d.assignedTruckId === id) {
+      dbUpdateDriver(d.id, { assignedTruckId: null }).catch(console.error);
+    }
+  });
+  saveDrivers(drivers.map((d) =>
     d.assignedTruckId === id ? { ...d, assignedTruckId: null } : d
   ));
+  dbDeleteTruck(id).catch(console.error);
 }
 
 // ─── Drivers ─────────────────────────────────────────────────────────────────
@@ -264,9 +270,8 @@ export function createDriver(data: Omit<Driver, "id" | "createdAt">): Driver {
     id: `driver-${Date.now()}`,
     createdAt: new Date().toISOString(),
   };
-  // If assigning to a truck, update that truck's associated driver name
-  // (in Supabase this would be a FK join, here we just store the relation on the driver)
   saveDrivers([...getDrivers(), driver]);
+  dbInsertDriver(driver).catch(console.error);
   return driver;
 }
 
@@ -277,10 +282,10 @@ export function updateDriver(id: string, data: Partial<Omit<Driver, "id" | "crea
 
   // If reassigning truck, unassign from previous
   if (data.assignedTruckId !== undefined && data.assignedTruckId !== drivers[idx].assignedTruckId) {
-    // Remove assignment from any driver previously on the new truck
     drivers.forEach((d, i) => {
       if (i !== idx && d.assignedTruckId === data.assignedTruckId) {
         drivers[i] = { ...d, assignedTruckId: null };
+        dbUpdateDriver(d.id, { assignedTruckId: null }).catch(console.error);
       }
     });
   }
@@ -288,11 +293,13 @@ export function updateDriver(id: string, data: Partial<Omit<Driver, "id" | "crea
   const updated = { ...drivers[idx], ...data };
   drivers[idx] = updated;
   saveDrivers(drivers);
+  dbUpdateDriver(id, data).catch(console.error);
   return updated;
 }
 
 export function deleteDriver(id: string): void {
   saveDrivers(getDrivers().filter((d) => d.id !== id));
+  dbDeleteDriver(id).catch(console.error);
 }
 
 // ─── Derived helpers ──────────────────────────────────────────────────────────

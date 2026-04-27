@@ -137,6 +137,7 @@ function formatDuration(minutes: number) {
 }
 
 import { equipmentLabel as equipLabel } from "@/lib/utils/constants";
+import { getLoad as getLoadFromDb } from "@/lib/supabase/db";
 
 // ─── Carrier quote card ────────────────────────────────────────────────────────
 
@@ -271,9 +272,9 @@ function CarrierQuoteCard({
           </p>
         ) : (
           <p className="text-[20px] font-bold tracking-tight text-[#111827]">
-            ${carrier.rateMin.toLocaleString()}
+            ${(carrier.rateMin ?? 0).toLocaleString()}
             <span className="mx-1 text-base font-normal text-[#9ca3af]">–</span>
-            ${carrier.rateMax.toLocaleString()}
+            ${(carrier.rateMax ?? 0).toLocaleString()}
           </p>
         )}
         {marketTag && (
@@ -474,7 +475,8 @@ export default function LoadDetailPage() {
       const active = sessionStorage.getItem("ch_active_load");
       if (active) { setLoad(JSON.parse(active)); return; }
     } catch { /* ignore */ }
-    setLoad({
+    // Fall back to Supabase if not in sessionStorage
+    const fallback: LoadDetail = {
       id,
       origin: "Charleston, SC",
       destination: "Atlanta, GA",
@@ -485,7 +487,11 @@ export default function LoadDetailPage() {
       createdAt: new Date().toISOString(),
       status: "active",
       notifiedCarriers: [],
-    });
+    };
+    getLoadFromDb(id).then((dbLoad) => {
+      if (dbLoad) { setLoad(dbLoad as unknown as LoadDetail); return; }
+      setLoad(fallback);
+    }).catch(() => setLoad(fallback));
   }, [params.id]);
 
   useEffect(() => {

@@ -43,8 +43,8 @@ export interface CarrierTruck {
   unit_number: string;
   equipment_type: string;
   max_payload_lbs: number;
-  temp_capability_min: number;
-  temp_capability_max: number;
+  temp_capability_min: number | null;
+  temp_capability_max: number | null;
   current_load_status: "available" | "on_load" | "maintenance" | "inactive";
   current_location_city: string;
   current_location_state: string;
@@ -217,6 +217,106 @@ const SEED_CARRIERS: CarrierProfile[] = [
     quick_pay_required: true,
     created_at: "2026-02-18T08:00:00Z",
   },
+  // C6 — Volunteer Freight Lines (dry van specialist)
+  {
+    id: "c6000000-0000-0000-0000-000000000006",
+    company_name: "Volunteer Freight Lines",
+    contact_name: "Bobby Harrell",
+    email: "dispatch@volunteerfreight.com",
+    phone: "615-555-0666",
+    city: "Nashville", state: "TN", domicile_state: "TN",
+    platform_status: "approved",
+    operating_authority_active: true,
+    mc_number: "MC-334567", dot_number: "DOT-4201555",
+    insurance_current: true, insurance_expiry_date: "2027-08-01", insurance_coverage_usd: 1000000,
+    certified_commodity_types: ["general", "electronics", "automotive", "paper"],
+    trailer_type: "carrier_owned", haul_preference: "any",
+    capabilities: ["gps_tracking", "lift_gate"],
+    rating: 4.62, total_loads_completed: 523,
+    on_time_pickup_rate: 0.945, on_time_delivery_rate: 0.938, acceptance_rate: 0.810,
+    quick_pay_required: false,
+    created_at: "2025-11-10T08:00:00Z",
+  },
+  // C7 — Iron City Flatbed Co (flatbed specialist)
+  {
+    id: "c7000000-0000-0000-0000-000000000007",
+    company_name: "Iron City Flatbed Co",
+    contact_name: "Ray Dawson",
+    email: "dispatch@ironcityflatbed.com",
+    phone: "205-555-0777",
+    city: "Birmingham", state: "AL", domicile_state: "AL",
+    platform_status: "approved",
+    operating_authority_active: true,
+    mc_number: "MC-228901", dot_number: "DOT-4455678",
+    insurance_current: true, insurance_expiry_date: "2027-05-15", insurance_coverage_usd: 1500000,
+    certified_commodity_types: ["steel", "lumber", "machinery", "construction"],
+    trailer_type: "carrier_owned", haul_preference: "long",
+    capabilities: ["gps_tracking", "oversize_permits", "tarping"],
+    rating: 4.79, total_loads_completed: 387,
+    on_time_pickup_rate: 0.955, on_time_delivery_rate: 0.950, acceptance_rate: 0.720,
+    quick_pay_required: false,
+    created_at: "2025-09-05T08:00:00Z",
+  },
+  // C8 — Commonwealth Carriers (mixed dry van + reefer)
+  {
+    id: "c8000000-0000-0000-0000-000000000008",
+    company_name: "Commonwealth Carriers Inc",
+    contact_name: "Angela Torres",
+    email: "dispatch@commonwealthcarriers.com",
+    phone: "804-555-0888",
+    city: "Richmond", state: "VA", domicile_state: "VA",
+    platform_status: "approved",
+    operating_authority_active: true,
+    mc_number: "MC-115432", dot_number: "DOT-3998127",
+    insurance_current: true, insurance_expiry_date: "2027-11-30", insurance_coverage_usd: 1200000,
+    certified_commodity_types: ["produce", "dairy", "general", "electronics", "beverages"],
+    trailer_type: "carrier_owned", haul_preference: "any",
+    capabilities: ["food_grade_washout", "gps_tracking", "temp_monitoring", "lift_gate"],
+    rating: 4.88, total_loads_completed: 612,
+    on_time_pickup_rate: 0.970, on_time_delivery_rate: 0.965, acceptance_rate: 0.760,
+    quick_pay_required: false,
+    created_at: "2025-07-20T08:00:00Z",
+  },
+  // C9 — Delta Heavy Haul (flatbed + step deck)
+  {
+    id: "c9000000-0000-0000-0000-000000000009",
+    company_name: "Delta Heavy Haul LLC",
+    contact_name: "James Whitfield",
+    email: "dispatch@deltaheavyhaul.com",
+    phone: "601-555-0999",
+    city: "Jackson", state: "MS", domicile_state: "MS",
+    platform_status: "approved",
+    operating_authority_active: true,
+    mc_number: "MC-667890", dot_number: "DOT-4312099",
+    insurance_current: true, insurance_expiry_date: "2027-07-20", insurance_coverage_usd: 2000000,
+    certified_commodity_types: ["steel", "machinery", "construction", "lumber", "equipment"],
+    trailer_type: "carrier_owned", haul_preference: "long",
+    capabilities: ["gps_tracking", "oversize_permits", "tarping", "hazmat_cert"],
+    rating: 4.71, total_loads_completed: 198,
+    on_time_pickup_rate: 0.935, on_time_delivery_rate: 0.928, acceptance_rate: 0.680,
+    quick_pay_required: false,
+    created_at: "2026-01-15T08:00:00Z",
+  },
+  // C10 — Bayou Express Transport (mixed dry van + reefer)
+  {
+    id: "ca000000-0000-0000-0000-00000000000a",
+    company_name: "Bayou Express Transport",
+    contact_name: "Claire Fontenot",
+    email: "dispatch@bayouexpress.com",
+    phone: "504-555-1010",
+    city: "New Orleans", state: "LA", domicile_state: "LA",
+    platform_status: "approved",
+    operating_authority_active: true,
+    mc_number: "MC-889012", dot_number: "DOT-4509832",
+    insurance_current: true, insurance_expiry_date: "2027-02-28", insurance_coverage_usd: 1000000,
+    certified_commodity_types: ["produce", "frozen", "general", "beverages", "seafood"],
+    trailer_type: "carrier_owned", haul_preference: "short",
+    capabilities: ["food_grade_washout", "gps_tracking", "temp_monitoring"],
+    rating: 4.83, total_loads_completed: 341,
+    on_time_pickup_rate: 0.958, on_time_delivery_rate: 0.952, acceptance_rate: 0.790,
+    quick_pay_required: false,
+    created_at: "2025-12-01T08:00:00Z",
+  },
 ];
 
 // ─── Trucks (50 total) ──────────────────────────────────────────────────────
@@ -281,6 +381,39 @@ const SEED_CARRIER_TRUCKS: CarrierTruck[] = [
   { id: "t5100000-0000-0000-0000-000000000008", carrier_id: "c5000000-0000-0000-0000-000000000005", unit_number: "MFS-508", equipment_type: "reefer_48", max_payload_lbs: 41000, temp_capability_min: 0, temp_capability_max: 70, current_load_status: "available", current_location_city: "Dothan", current_location_state: "GA", availability_window_start: "2026-03-24T09:00:00Z", availability_window_end: "2026-03-27T09:00:00Z" },
   { id: "t5100000-0000-0000-0000-000000000009", carrier_id: "c5000000-0000-0000-0000-000000000005", unit_number: "MFS-509", equipment_type: "reefer_53", max_payload_lbs: 44000, temp_capability_min: -20, temp_capability_max: 70, current_load_status: "available", current_location_city: "Thomasville", current_location_state: "GA", availability_window_start: "2026-03-24T07:00:00Z", availability_window_end: "2026-03-28T07:00:00Z" },
   { id: "t5100000-0000-0000-0000-000000000010", carrier_id: "c5000000-0000-0000-0000-000000000005", unit_number: "MFS-510", equipment_type: "reefer_53", max_payload_lbs: 44000, temp_capability_min: -20, temp_capability_max: 70, current_load_status: "on_load", current_location_city: "Atlanta", current_location_state: "GA", availability_window_start: "2026-03-26T10:00:00Z", availability_window_end: "2026-03-29T10:00:00Z" },
+
+  // Volunteer Freight Lines (C6) — 15 dry vans
+  { id: "t6100000-0000-0000-0000-000000000001", carrier_id: "c6000000-0000-0000-0000-000000000006", unit_number: "VFL-001", equipment_type: "dry_van", max_payload_lbs: 45000, temp_capability_min: null, temp_capability_max: null, current_load_status: "available", current_location_city: "Nashville", current_location_state: "TN", availability_window_start: "2026-04-24T06:00:00Z", availability_window_end: "2026-04-30T18:00:00Z" },
+  { id: "t6100000-0000-0000-0000-000000000002", carrier_id: "c6000000-0000-0000-0000-000000000006", unit_number: "VFL-002", equipment_type: "dry_van", max_payload_lbs: 45000, temp_capability_min: null, temp_capability_max: null, current_load_status: "available", current_location_city: "Memphis", current_location_state: "TN", availability_window_start: "2026-04-24T06:00:00Z", availability_window_end: "2026-04-30T18:00:00Z" },
+  { id: "t6100000-0000-0000-0000-000000000003", carrier_id: "c6000000-0000-0000-0000-000000000006", unit_number: "VFL-003", equipment_type: "dry_van", max_payload_lbs: 45000, temp_capability_min: null, temp_capability_max: null, current_load_status: "on_load", current_location_city: "Knoxville", current_location_state: "TN", availability_window_start: "2026-04-24T06:00:00Z", availability_window_end: "2026-04-30T18:00:00Z" },
+  { id: "t6100000-0000-0000-0000-000000000004", carrier_id: "c6000000-0000-0000-0000-000000000006", unit_number: "VFL-004", equipment_type: "dry_van", max_payload_lbs: 45000, temp_capability_min: null, temp_capability_max: null, current_load_status: "available", current_location_city: "Chattanooga", current_location_state: "TN", availability_window_start: "2026-04-24T06:00:00Z", availability_window_end: "2026-04-30T18:00:00Z" },
+  { id: "t6100000-0000-0000-0000-000000000005", carrier_id: "c6000000-0000-0000-0000-000000000006", unit_number: "VFL-005", equipment_type: "dry_van", max_payload_lbs: 45000, temp_capability_min: null, temp_capability_max: null, current_load_status: "available", current_location_city: "Nashville", current_location_state: "TN", availability_window_start: "2026-04-24T06:00:00Z", availability_window_end: "2026-04-30T18:00:00Z" },
+
+  // Iron City Flatbed (C7) — 8 flatbed/step deck
+  { id: "t7100000-0000-0000-0000-000000000001", carrier_id: "c7000000-0000-0000-0000-000000000007", unit_number: "ICF-001", equipment_type: "flatbed", max_payload_lbs: 48000, temp_capability_min: null, temp_capability_max: null, current_load_status: "available", current_location_city: "Birmingham", current_location_state: "AL", availability_window_start: "2026-04-24T06:00:00Z", availability_window_end: "2026-04-30T18:00:00Z" },
+  { id: "t7100000-0000-0000-0000-000000000002", carrier_id: "c7000000-0000-0000-0000-000000000007", unit_number: "ICF-002", equipment_type: "flatbed", max_payload_lbs: 48000, temp_capability_min: null, temp_capability_max: null, current_load_status: "available", current_location_city: "Huntsville", current_location_state: "AL", availability_window_start: "2026-04-24T06:00:00Z", availability_window_end: "2026-04-30T18:00:00Z" },
+  { id: "t7100000-0000-0000-0000-000000000003", carrier_id: "c7000000-0000-0000-0000-000000000007", unit_number: "ICF-003", equipment_type: "step_deck", max_payload_lbs: 48000, temp_capability_min: null, temp_capability_max: null, current_load_status: "on_load", current_location_city: "Mobile", current_location_state: "AL", availability_window_start: "2026-04-24T06:00:00Z", availability_window_end: "2026-04-30T18:00:00Z" },
+  { id: "t7100000-0000-0000-0000-000000000004", carrier_id: "c7000000-0000-0000-0000-000000000007", unit_number: "ICF-004", equipment_type: "flatbed", max_payload_lbs: 48000, temp_capability_min: null, temp_capability_max: null, current_load_status: "available", current_location_city: "Montgomery", current_location_state: "AL", availability_window_start: "2026-04-24T06:00:00Z", availability_window_end: "2026-04-30T18:00:00Z" },
+  { id: "t7100000-0000-0000-0000-000000000005", carrier_id: "c7000000-0000-0000-0000-000000000007", unit_number: "ICF-005", equipment_type: "step_deck", max_payload_lbs: 48000, temp_capability_min: null, temp_capability_max: null, current_load_status: "available", current_location_city: "Birmingham", current_location_state: "AL", availability_window_start: "2026-04-24T06:00:00Z", availability_window_end: "2026-04-30T18:00:00Z" },
+
+  // Commonwealth Carriers (C8) — 10 trucks (mixed dry van + reefer)
+  { id: "t8100000-0000-0000-0000-000000000001", carrier_id: "c8000000-0000-0000-0000-000000000008", unit_number: "CWC-001", equipment_type: "dry_van", max_payload_lbs: 45000, temp_capability_min: null, temp_capability_max: null, current_load_status: "available", current_location_city: "Richmond", current_location_state: "VA", availability_window_start: "2026-04-24T06:00:00Z", availability_window_end: "2026-04-30T18:00:00Z" },
+  { id: "t8100000-0000-0000-0000-000000000002", carrier_id: "c8000000-0000-0000-0000-000000000008", unit_number: "CWC-002", equipment_type: "reefer_53", max_payload_lbs: 44000, temp_capability_min: -20, temp_capability_max: 70, current_load_status: "available", current_location_city: "Norfolk", current_location_state: "VA", availability_window_start: "2026-04-24T06:00:00Z", availability_window_end: "2026-04-30T18:00:00Z" },
+  { id: "t8100000-0000-0000-0000-000000000003", carrier_id: "c8000000-0000-0000-0000-000000000008", unit_number: "CWC-003", equipment_type: "dry_van", max_payload_lbs: 45000, temp_capability_min: null, temp_capability_max: null, current_load_status: "on_load", current_location_city: "Virginia Beach", current_location_state: "VA", availability_window_start: "2026-04-24T06:00:00Z", availability_window_end: "2026-04-30T18:00:00Z" },
+  { id: "t8100000-0000-0000-0000-000000000004", carrier_id: "c8000000-0000-0000-0000-000000000008", unit_number: "CWC-004", equipment_type: "reefer_53", max_payload_lbs: 44000, temp_capability_min: -10, temp_capability_max: 70, current_load_status: "available", current_location_city: "Roanoke", current_location_state: "VA", availability_window_start: "2026-04-24T06:00:00Z", availability_window_end: "2026-04-30T18:00:00Z" },
+  { id: "t8100000-0000-0000-0000-000000000005", carrier_id: "c8000000-0000-0000-0000-000000000008", unit_number: "CWC-005", equipment_type: "dry_van", max_payload_lbs: 45000, temp_capability_min: null, temp_capability_max: null, current_load_status: "available", current_location_city: "Richmond", current_location_state: "VA", availability_window_start: "2026-04-24T06:00:00Z", availability_window_end: "2026-04-30T18:00:00Z" },
+
+  // Delta Heavy Haul (C9) — 5 flatbed/step deck
+  { id: "t9100000-0000-0000-0000-000000000001", carrier_id: "c9000000-0000-0000-0000-000000000009", unit_number: "DHH-001", equipment_type: "flatbed", max_payload_lbs: 48000, temp_capability_min: null, temp_capability_max: null, current_load_status: "available", current_location_city: "Jackson", current_location_state: "MS", availability_window_start: "2026-04-24T06:00:00Z", availability_window_end: "2026-04-30T18:00:00Z" },
+  { id: "t9100000-0000-0000-0000-000000000002", carrier_id: "c9000000-0000-0000-0000-000000000009", unit_number: "DHH-002", equipment_type: "step_deck", max_payload_lbs: 48000, temp_capability_min: null, temp_capability_max: null, current_load_status: "available", current_location_city: "Gulfport", current_location_state: "MS", availability_window_start: "2026-04-24T06:00:00Z", availability_window_end: "2026-04-30T18:00:00Z" },
+  { id: "t9100000-0000-0000-0000-000000000003", carrier_id: "c9000000-0000-0000-0000-000000000009", unit_number: "DHH-003", equipment_type: "flatbed", max_payload_lbs: 48000, temp_capability_min: null, temp_capability_max: null, current_load_status: "on_load", current_location_city: "Hattiesburg", current_location_state: "MS", availability_window_start: "2026-04-24T06:00:00Z", availability_window_end: "2026-04-30T18:00:00Z" },
+
+  // Bayou Express Transport (C10) — 5 trucks (mixed dry van + reefer)
+  { id: "ta100000-0000-0000-0000-000000000001", carrier_id: "ca000000-0000-0000-0000-00000000000a", unit_number: "BET-001", equipment_type: "reefer_53", max_payload_lbs: 44000, temp_capability_min: -20, temp_capability_max: 70, current_load_status: "available", current_location_city: "New Orleans", current_location_state: "LA", availability_window_start: "2026-04-24T06:00:00Z", availability_window_end: "2026-04-30T18:00:00Z" },
+  { id: "ta100000-0000-0000-0000-000000000002", carrier_id: "ca000000-0000-0000-0000-00000000000a", unit_number: "BET-002", equipment_type: "dry_van", max_payload_lbs: 45000, temp_capability_min: null, temp_capability_max: null, current_load_status: "available", current_location_city: "Baton Rouge", current_location_state: "LA", availability_window_start: "2026-04-24T06:00:00Z", availability_window_end: "2026-04-30T18:00:00Z" },
+  { id: "ta100000-0000-0000-0000-000000000003", carrier_id: "ca000000-0000-0000-0000-00000000000a", unit_number: "BET-003", equipment_type: "reefer_53", max_payload_lbs: 44000, temp_capability_min: -10, temp_capability_max: 70, current_load_status: "available", current_location_city: "Shreveport", current_location_state: "LA", availability_window_start: "2026-04-24T06:00:00Z", availability_window_end: "2026-04-30T18:00:00Z" },
+  { id: "ta100000-0000-0000-0000-000000000004", carrier_id: "ca000000-0000-0000-0000-00000000000a", unit_number: "BET-004", equipment_type: "dry_van", max_payload_lbs: 45000, temp_capability_min: null, temp_capability_max: null, current_load_status: "on_load", current_location_city: "Lafayette", current_location_state: "LA", availability_window_start: "2026-04-24T06:00:00Z", availability_window_end: "2026-04-30T18:00:00Z" },
+  { id: "ta100000-0000-0000-0000-000000000005", carrier_id: "ca000000-0000-0000-0000-00000000000a", unit_number: "BET-005", equipment_type: "dry_van", max_payload_lbs: 45000, temp_capability_min: null, temp_capability_max: null, current_load_status: "available", current_location_city: "New Orleans", current_location_state: "LA", availability_window_start: "2026-04-24T06:00:00Z", availability_window_end: "2026-04-30T18:00:00Z" },
 ];
 
 // ─── Repeat booking history ─────────────────────────────────────────────────
@@ -313,22 +446,19 @@ const SEED_LANE_HISTORY: LaneHistoryEntry[] = [
 
 export function ensureCarrierData(): void {
   if (typeof window === "undefined") return;
-  const currentVersion = sessionStorage.getItem(KEY_SEED_VERSION);
-  const needsReseed = currentVersion !== SEED_VERSION;
-  if (needsReseed || !sessionStorage.getItem(KEY_CARRIERS)) {
+  // SyncProvider populates these from Supabase on dashboard mount.
+  // Only fall back to hardcoded seeds if Supabase sync hasn't run yet.
+  if (!sessionStorage.getItem(KEY_CARRIERS)) {
     sessionStorage.setItem(KEY_CARRIERS, JSON.stringify(SEED_CARRIERS));
   }
-  if (needsReseed || !sessionStorage.getItem(KEY_CARRIER_TRUCKS)) {
+  if (!sessionStorage.getItem(KEY_CARRIER_TRUCKS)) {
     sessionStorage.setItem(KEY_CARRIER_TRUCKS, JSON.stringify(SEED_CARRIER_TRUCKS));
   }
-  if (needsReseed || !sessionStorage.getItem(KEY_REPEAT_BOOKING)) {
+  if (!sessionStorage.getItem(KEY_REPEAT_BOOKING)) {
     sessionStorage.setItem(KEY_REPEAT_BOOKING, JSON.stringify(SEED_REPEAT_BOOKING));
   }
-  if (needsReseed || !sessionStorage.getItem(KEY_LANE_HISTORY)) {
+  if (!sessionStorage.getItem(KEY_LANE_HISTORY)) {
     sessionStorage.setItem(KEY_LANE_HISTORY, JSON.stringify(SEED_LANE_HISTORY));
-  }
-  if (needsReseed) {
-    sessionStorage.setItem(KEY_SEED_VERSION, SEED_VERSION);
   }
 }
 

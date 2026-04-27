@@ -23,6 +23,7 @@ import {
   Zap,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
+import { getLoad, updateLoad } from "@/lib/supabase/db";
 import { useAuth } from "@/hooks/useAuth";
 import {
   runMatching,
@@ -332,7 +333,14 @@ export default function FindTrucksPage() {
       const active = sessionStorage.getItem("ch_active_load");
       if (active) { setLoad(JSON.parse(active)); return; }
     } catch { /* ignore */ }
-    setLoad(fallback);
+    // Fall back to Supabase if not in sessionStorage
+    getLoad(id).then((dbLoad) => {
+      if (dbLoad) {
+        setLoad({ ...dbLoad, durationMinutes: dbLoad.transitMinutes } as ActiveLoad);
+      } else {
+        setLoad(fallback);
+      }
+    }).catch(() => setLoad(fallback));
   }, [params.id]);
 
   // Run matching algorithm when load is available
@@ -372,6 +380,9 @@ export default function FindTrucksPage() {
           : l
       );
       sessionStorage.setItem("ch_loads", JSON.stringify(updated));
+      // Persist status change to Supabase
+      const newStatus = notified.length > 0 ? "carriers_notified" : "active";
+      if (load?.id) updateLoad(load.id, { status: newStatus }).catch(console.error);
     } catch { /* ignore */ }
   }
 

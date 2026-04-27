@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown, LogOut } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
 /** Minimalist wheel-spoke SVG icon */
 function SpokeIcon({ size = 17 }: { size?: number }) {
@@ -73,9 +74,9 @@ export function TopBar({
       ? `3PL · ${companyCity ?? ""}${companyState ? `, ${companyState}` : ""}`
       : "Admin";
 
-  function handleSignOut() {
-    // TODO: Replace with Supabase signOut when wiring real auth:
-    // await supabase.auth.signOut();
+  async function handleSignOut() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
     router.push("/login");
   }
 

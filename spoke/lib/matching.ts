@@ -21,7 +21,7 @@ import {
 
 const MAX_DEADHEAD_MILES = 150;
 const MAX_FRESHNESS_WINDOW_HOURS = 72;
-const SOUTHEAST_STATES = ["SC", "GA", "NC", "FL"];
+const SOUTHEAST_STATES = ["SC", "GA", "NC", "FL", "TN", "AL", "VA", "MS", "LA", "TX", "AR", "KY", "WV", "MD", "DC"];
 const DEFAULT_TOP_K = 10;
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -186,11 +186,7 @@ function applyHardFilters(
       rejections.push({ carrier_id: c.id, carrier_name: c.company_name, reason: `coverage $${c.insurance_coverage_usd?.toLocaleString()} < required $${load.required_coverage_usd.toLocaleString()}` });
       continue;
     }
-    // 5. Commodity certification
-    if (!c.certified_commodity_types.includes(load.commodity_type)) {
-      rejections.push({ carrier_id: c.id, carrier_name: c.company_name, reason: `not certified for ${load.commodity_type}` });
-      continue;
-    }
+    // 5. Commodity certification — soft constraint (scored, not hard-filtered)
     // 6. Domicile state
     if (!SOUTHEAST_STATES.includes(c.domicile_state)) {
       rejections.push({ carrier_id: c.id, carrier_name: c.company_name, reason: `domicile ${c.domicile_state} outside SE region` });
@@ -224,8 +220,8 @@ function applyHardFilters(
     for (const t of carrierTrucks) {
       if (t.current_load_status === "on_load") { console.debug(`[match] ${c.company_name} truck ${t.unit_number}: skip — on_load`); continue; }
       if (load.required_equipment_types.length > 0 && !load.required_equipment_types.includes(t.equipment_type)) { console.debug(`[match] ${c.company_name} truck ${t.unit_number}: skip — equipment ${t.equipment_type} not in [${load.required_equipment_types}]`); continue; }
-      if (load.required_temp_min != null && t.temp_capability_min > load.required_temp_min) { console.debug(`[match] ${c.company_name} truck ${t.unit_number}: skip — temp_min ${t.temp_capability_min} > required ${load.required_temp_min}`); continue; }
-      if (load.required_temp_max != null && t.temp_capability_max < load.required_temp_max) { console.debug(`[match] ${c.company_name} truck ${t.unit_number}: skip — temp_max ${t.temp_capability_max} < required ${load.required_temp_max}`); continue; }
+      if (load.required_temp_min != null && (t.temp_capability_min == null || t.temp_capability_min > load.required_temp_min)) { console.debug(`[match] ${c.company_name} truck ${t.unit_number}: skip — temp_min ${t.temp_capability_min} > required ${load.required_temp_min}`); continue; }
+      if (load.required_temp_max != null && (t.temp_capability_max == null || t.temp_capability_max < load.required_temp_max)) { console.debug(`[match] ${c.company_name} truck ${t.unit_number}: skip — temp_max ${t.temp_capability_max} < required ${load.required_temp_max}`); continue; }
       if (t.max_payload_lbs < load.weight_lbs) { console.debug(`[match] ${c.company_name} truck ${t.unit_number}: skip — payload ${t.max_payload_lbs} < required ${load.weight_lbs}`); continue; }
       eligibleTrucks.push(t);
     }

@@ -1,18 +1,17 @@
 /**
- * Conversation / messaging system — sessionStorage-backed for the demo.
+ * Conversation / messaging system — sessionStorage + Supabase write-through.
  *
- * TODO: Replace sessionStorage with Supabase:
- *   Tables:
- *     conversations (id, load_id, carrier_id, broker_id, created_at)
- *     messages (id, conversation_id, sender_role, body, offer_event jsonb, created_at)
- *     offers (id, conversation_id, amount, from_role, status, created_at)
- *
- *   Realtime (new messages pushed to client):
- *     supabase.channel('messages')
- *       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages',
- *           filter: `conversation_id=eq.${convId}` }, handler)
- *       .subscribe()
+ * All writes persist to both sessionStorage (instant local reads)
+ * and Supabase (persistence across sessions).
  */
+
+import {
+  upsertConversation as dbUpsertConv,
+  updateConversation as dbUpdateConv,
+  insertMessage as dbInsertMsg,
+  type DbConversation,
+  type DbMessage,
+} from "./supabase/db";
 
 export interface Message {
   id: string;
@@ -74,6 +73,17 @@ function saveConversations(convs: Conversation[]): void {
   sessionStorage.setItem(CONVS_KEY, JSON.stringify(convs));
 }
 
+function persistConvToSupabase(c: Conversation): void {
+  const row: DbConversation = {
+    id: c.id, loadId: c.loadId, carrierId: c.carrierId,
+    carrierName: c.carrierName, driverName: c.driverName, truckNum: c.truckNum,
+    origin: c.origin, destination: c.destination, offer: c.offer,
+    lastMessage: c.lastMessage, lastActivity: c.lastActivity,
+    unreadBroker: c.unreadBroker, unreadCarrier: c.unreadCarrier,
+  };
+  dbUpsertConv(row).catch(console.error);
+}
+
 export function getMessages(convId: string): Message[] {
   if (typeof window === "undefined") return [];
   try {
@@ -85,6 +95,14 @@ export function getMessages(convId: string): Message[] {
 
 function saveMessages(convId: string, msgs: Message[]): void {
   sessionStorage.setItem(`ch_msgs_${convId}`, JSON.stringify(msgs));
+}
+
+function persistMsgToSupabase(convId: string, m: Message): void {
+  const row: DbMessage = {
+    id: m.id, conversationId: convId, sender: m.sender,
+    body: m.body, offerEvent: m.offerEvent, timestamp: m.timestamp,
+  };
+  dbInsertMsg(row).catch(console.error);
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -113,6 +131,7 @@ export function ensureConversation(data: {
     unreadCarrier: 0,
   };
   saveConversations([conv, ...getConversations()]);
+  persistConvToSupabase(conv);
   return conv;
 }
 
@@ -136,24 +155,25 @@ export function addMessage(
     timestamp: new Date().toISOString(),
   };
   saveMessages(convId, [...getMessages(convId), newMsg]);
+  persistMsgToSupabase(convId, newMsg);
 
   const convs = getConversations();
-  saveConversations(
-    convs.map((c) =>
-      c.id === convId
-        ? {
-            ...c,
-            lastMessage: msg.body,
-            lastActivity: newMsg.timestamp,
-            // Increment unread for the other side
-            unreadBroker:
-              msg.sender === "carrier" ? c.unreadBroker + 1 : c.unreadBroker,
-            unreadCarrier:
-              msg.sender === "3pl" ? (c.unreadCarrier ?? 0) + 1 : (c.unreadCarrier ?? 0),
-          }
-        : c
-    )
+  const updatedConvs = convs.map((c) =>
+    c.id === convId
+      ? {
+          ...c,
+          lastMessage: msg.body,
+          lastActivity: newMsg.timestamp,
+          unreadBroker:
+            msg.sender === "carrier" ? c.unreadBroker + 1 : c.unreadBroker,
+          unreadCarrier:
+            msg.sender === "3pl" ? (c.unreadCarrier ?? 0) + 1 : (c.unreadCarrier ?? 0),
+        }
+      : c
   );
+  saveConversations(updatedConvs);
+  const updatedConv = updatedConvs.find((c) => c.id === convId);
+  if (updatedConv) persistConvToSupabase(updatedConv);
   return newMsg;
 }
 
@@ -165,26 +185,27 @@ export function sendOffer(
   loadContext?: { loadId: string; origin: string; destination: string }
 ): void {
   const convs = getConversations();
-  saveConversations(
-    convs.map((c) =>
-      c.id === convId
-        ? {
-            ...c,
-            offer: {
-              amount,
-              from,
-              status: "pending",
-              timestamp: new Date().toISOString(),
-              loadId: loadContext?.loadId,
-              loadOrigin: loadContext?.origin,
-              loadDestination: loadContext?.destination,
-            },
-            lastMessage: `${from === "3pl" ? "Broker" : "Carrier"} offered $${amount.toLocaleString()}`,
-            lastActivity: new Date().toISOString(),
-          }
-        : c
-    )
+  const updatedConvs = convs.map((c) =>
+    c.id === convId
+      ? {
+          ...c,
+          offer: {
+            amount,
+            from,
+            status: "pending" as const,
+            timestamp: new Date().toISOString(),
+            loadId: loadContext?.loadId,
+            loadOrigin: loadContext?.origin,
+            loadDestination: loadContext?.destination,
+          },
+          lastMessage: `${from === "3pl" ? "Broker" : "Carrier"} offered $${amount.toLocaleString()}`,
+          lastActivity: new Date().toISOString(),
+        }
+      : c
   );
+  saveConversations(updatedConvs);
+  const updatedConv = updatedConvs.find((c) => c.id === convId);
+  if (updatedConv) persistConvToSupabase(updatedConv);
   addMessage(convId, {
     sender: from,
     body: `Offer: $${amount.toLocaleString()}`,
@@ -205,36 +226,37 @@ export function respondToOffer(
   const prevAmount = conv.offer.amount;
 
   const convs = getConversations();
-  saveConversations(
-    convs.map((c) => {
-      if (c.id !== convId) return c;
-      if (action === "countered" && counterAmount) {
-        return {
-          ...c,
-          offer: {
-            amount: counterAmount,
-            from: by, // counter offer is now from the responder
-            status: "pending" as const,
-            timestamp: new Date().toISOString(),
-            loadId: c.offer?.loadId,
-            loadOrigin: c.offer?.loadOrigin,
-            loadDestination: c.offer?.loadDestination,
-          },
-          lastMessage: `Counter offer: $${counterAmount.toLocaleString()}`,
-          lastActivity: new Date().toISOString(),
-        };
-      }
+  const updatedConvs = convs.map((c) => {
+    if (c.id !== convId) return c;
+    if (action === "countered" && counterAmount) {
       return {
         ...c,
-        offer: { ...c.offer!, status: action as "accepted" | "declined" },
-        lastMessage:
-          action === "accepted"
-            ? `Offer accepted · $${prevAmount.toLocaleString()}`
-            : "Offer declined",
+        offer: {
+          amount: counterAmount,
+          from: by,
+          status: "pending" as const,
+          timestamp: new Date().toISOString(),
+          loadId: c.offer?.loadId,
+          loadOrigin: c.offer?.loadOrigin,
+          loadDestination: c.offer?.loadDestination,
+        },
+        lastMessage: `Counter offer: $${counterAmount.toLocaleString()}`,
         lastActivity: new Date().toISOString(),
       };
-    })
-  );
+    }
+    return {
+      ...c,
+      offer: { ...c.offer!, status: action as "accepted" | "declined" },
+      lastMessage:
+        action === "accepted"
+          ? `Offer accepted · $${prevAmount.toLocaleString()}`
+          : "Offer declined",
+      lastActivity: new Date().toISOString(),
+    };
+  });
+  saveConversations(updatedConvs);
+  const updatedConv = updatedConvs.find((c) => c.id === convId);
+  if (updatedConv) persistConvToSupabase(updatedConv);
 
   if (action === "countered" && counterAmount) {
     addMessage(convId, {
@@ -265,6 +287,7 @@ export function updateConversationTruck(
       c.id === convId ? { ...c, truckNum, driverName } : c
     )
   );
+  dbUpdateConv(convId, { truck_num: truckNum, driver_name: driverName }).catch(console.error);
 }
 
 /** Mark a conversation as read for the given role. */
@@ -283,6 +306,8 @@ export function markConversationRead(
         : c
     )
   );
+  const update = role === "3pl" ? { unread_broker: 0 } : { unread_carrier: 0 };
+  dbUpdateConv(convId, update).catch(console.error);
 }
 
 export function getTotalUnread(role: "3pl" | "carrier" = "3pl"): number {

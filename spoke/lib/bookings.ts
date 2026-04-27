@@ -1,18 +1,13 @@
 /**
- * Booking system — sessionStorage-backed for the demo.
+ * Booking system — sessionStorage + Supabase write-through.
  *
  * A booking is created when either party accepts an offer in the inbox.
- *
- * TODO: Replace sessionStorage with Supabase:
- *   Table: bookings (id, load_id, carrier_id, broker_id, accepted_rate,
- *                    shipment_status, pickup_date, commodity, temperature,
- *                    equipment_type, driver_name, truck_num, created_at)
- *
- *   Write:  INSERT INTO bookings (...) VALUES (...)
- *   Read:   SELECT * FROM bookings WHERE broker_id = auth.uid() ORDER BY created_at DESC
- *           SELECT * FROM bookings WHERE carrier_id = auth.uid() ORDER BY created_at DESC
- *   Update: UPDATE bookings SET shipment_status = $status WHERE id = $id
+ * All writes persist to both sessionStorage (for instant local reads)
+ * and Supabase (for persistence across sessions).
  */
+
+import { insertBooking as dbInsertBooking, updateBooking as dbUpdateBooking, type DbBooking } from "./supabase/db";
+import { updateLoad as dbUpdateLoad } from "./supabase/db";
 
 export type ShipmentStatus =
   | "confirmed"
@@ -77,6 +72,18 @@ function saveBookings(bookings: Booking[]): void {
   sessionStorage.setItem(BOOKINGS_KEY, JSON.stringify(bookings));
 }
 
+function persistBookingToSupabase(b: Booking): void {
+  const dbRow: DbBooking = {
+    id: b.id, convId: b.convId, loadId: b.loadId, carrierId: b.carrierId,
+    carrierName: b.carrierName, driverName: b.driverName, truckNum: b.truckNum,
+    origin: b.origin, destination: b.destination, acceptedRate: b.acceptedRate,
+    pickupDate: b.pickupDate, commodity: b.commodity, temperature: b.temperature,
+    equipmentType: b.equipmentType, distanceMiles: b.distanceMiles,
+    shipmentStatus: b.shipmentStatus, createdAt: b.createdAt,
+  };
+  dbInsertBooking(dbRow).catch(console.error);
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /** Create a booking from a conversation + accepted offer amount. */
@@ -109,6 +116,7 @@ export function createBooking(data: {
     shipmentStatus: "confirmed",
   };
   saveBookings([booking, ...getBookings()]);
+  persistBookingToSupabase(booking);
 
   // Also update the load status to "booked" in ch_loads
   try {
@@ -120,6 +128,7 @@ export function createBooking(data: {
   } catch {
     // Ignore if ch_loads isn't available
   }
+  dbUpdateLoad(data.loadId, { status: "booked" }).catch(console.error);
 
   return booking;
 }
@@ -136,6 +145,7 @@ export function advanceBookingStatus(bookingId: string): Booking | null {
   const nextStatus = SHIPMENT_STATUS_ORDER[idx + 1];
   const updated = { ...booking, shipmentStatus: nextStatus };
   saveBookings(bookings.map((b) => (b.id === bookingId ? updated : b)));
+  dbUpdateBooking(bookingId, { shipment_status: nextStatus }).catch(console.error);
   return updated;
 }
 
@@ -149,6 +159,7 @@ export function setBookingStatus(
       b.id === bookingId ? { ...b, shipmentStatus: status } : b
     )
   );
+  dbUpdateBooking(bookingId, { shipment_status: status }).catch(console.error);
 }
 
 /** Update the truck and driver assigned to a booking. */
@@ -162,6 +173,7 @@ export function updateBookingTruck(
       b.id === bookingId ? { ...b, truckNum, driverName } : b
     )
   );
+  dbUpdateBooking(bookingId, { truck_num: truckNum, driver_name: driverName }).catch(console.error);
 }
 
 /** Returns bookings for a specific carrier (demo: all bookings). */

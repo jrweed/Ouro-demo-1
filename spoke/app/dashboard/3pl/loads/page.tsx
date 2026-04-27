@@ -68,6 +68,7 @@ function formatDate(dateStr: string) {
 }
 
 import { equipmentLabel as equipLabel } from "@/lib/utils/constants";
+import { getLoads } from "@/lib/supabase/db";
 
 // ─── Load row card ─────────────────────────────────────────────────────────────
 
@@ -166,15 +167,8 @@ export default function MyLoadsPage() {
     if (!loading && user && user.role !== "3pl") router.push("/dashboard/carrier");
   }, [user, loading, router]);
 
-  // Read loads from sessionStorage on mount.
-  // TODO: Replace with: SELECT * FROM loads WHERE broker_id = auth.uid() ORDER BY created_at DESC
   useEffect(() => {
-    try {
-      const stored = JSON.parse(sessionStorage.getItem("ch_loads") || "[]");
-      setLoads(stored);
-    } catch {
-      setLoads([]);
-    }
+    getLoads().then((data) => setLoads(data as unknown as StoredLoad[])).catch(() => setLoads([]));
   }, []);
 
   const filtered =

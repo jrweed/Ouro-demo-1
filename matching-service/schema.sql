@@ -11,14 +11,29 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- =============================================================================
 -- PROFILES (unified auth table — supports 3pl, carrier, driver, admin roles)
 -- =============================================================================
--- NOTE: When using Supabase Auth, this table links to auth.users via id.
--- The 'driver' role and parent_carrier_id are reserved for Phase 2 mobile app.
--- CREATE TABLE profiles (
---     id                UUID PRIMARY KEY REFERENCES auth.users(id),
---     role              TEXT NOT NULL CHECK (role IN ('3pl', 'carrier', 'driver', 'admin')),
---     parent_carrier_id UUID REFERENCES profiles(id),  -- driver→carrier link (Phase 2)
---     created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
--- );
+-- Links to Supabase auth.users via id. Every sign-up must create a matching row.
+CREATE TABLE profiles (
+    id                UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    role              TEXT NOT NULL CHECK (role IN ('3pl', 'carrier', 'driver', 'admin')),
+    company_name      TEXT NOT NULL DEFAULT '',
+    contact_name      TEXT NOT NULL DEFAULT '',
+    city              TEXT NOT NULL DEFAULT '',
+    state             TEXT NOT NULL DEFAULT '',
+    mc_number         TEXT,
+    parent_carrier_id UUID REFERENCES profiles(id),  -- driver→carrier link (Phase 2)
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Row Level Security: users can only read/update their own profile
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can read own profile"
+  ON profiles FOR SELECT
+  USING (auth.uid() = id);
+
+CREATE POLICY "Users can update own profile"
+  ON profiles FOR UPDATE
+  USING (auth.uid() = id);
 
 -- =============================================================================
 -- BROKERS

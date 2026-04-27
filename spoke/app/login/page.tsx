@@ -32,27 +32,29 @@ export default function LoginPage() {
 
     try {
       const supabase = createClient();
-      // TODO: When wiring real Supabase, this call already uses the correct interface.
-      // After sign-in, fetch the user's role from `profiles` table:
-      //   const { data: profile } = await supabase.from("profiles").select("role").single();
-      //   router.push(profile.role === "carrier" ? "/dashboard/carrier" : "/dashboard/3pl");
-      const { data, error: authError } = await supabase.auth.signInWithPassword({
+      const { error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (authError || !data) {
-        setError(authError?.message ?? "Invalid email or password");
+      if (authError) {
+        setError(authError.message);
         return;
       }
 
-      // Route based on role (demo: stored in user object; real: from profiles table)
-      const role = (data.user as { role?: string }).role;
-      if (role === "carrier") {
+      // Fetch role from profiles table to determine dashboard
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .single();
+
+      if (profile?.role === "carrier") {
         router.push("/dashboard/carrier");
       } else {
         router.push("/dashboard/3pl");
       }
+    } catch {
+      setError("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }

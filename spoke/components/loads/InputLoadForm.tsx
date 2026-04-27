@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { AIPricingSidebar, generateMockPricing } from "./AIPricingSidebar";
 import type { AIPricingData } from "./AIPricingSidebar";
+import { createLoad, type StoredLoad } from "@/lib/supabase/db";
 import dynamic from "next/dynamic";
 
 // Dynamically import the map (no SSR) — Leaflet requires browser APIs.
@@ -449,11 +450,26 @@ export function InputLoadForm() {
       notifiedCarriers: [],
     };
 
-    // Persist to active-load slot (used by find-trucks) and to the loads list (used by My Loads).
-    // TODO: Both replaced by Supabase queries once the DB is wired.
+    // Persist to Supabase
+    await createLoad({
+      id: loadId,
+      status: "active",
+      origin: demoLoad.origin,
+      destination: demoLoad.destination,
+      pickupDate: demoLoad.pickupDate,
+      commodity: demoLoad.commodity,
+      temperature: demoLoad.temperature,
+      equipmentType: demoLoad.equipmentType,
+      weightLbs: demoLoad.weightLbs,
+      distanceMiles: demoLoad.distanceMiles || 0,
+      transitMinutes: demoLoad.durationMinutes || 0,
+      targetRate: demoLoad.targetRate,
+      pricingRateMin: demoLoad.pricingRateMin || 0,
+      pricingRateMax: demoLoad.pricingRateMax || 0,
+      createdAt: demoLoad.createdAt,
+    });
+    // Also keep in sessionStorage for find-trucks page (reads active load)
     sessionStorage.setItem("ch_active_load", JSON.stringify(demoLoad));
-    const existing = JSON.parse(sessionStorage.getItem("ch_loads") || "[]");
-    sessionStorage.setItem("ch_loads", JSON.stringify([demoLoad, ...existing]));
 
     await new Promise((r) => setTimeout(r, 600));
     router.push(`/dashboard/3pl/loads/${loadId}/find-trucks`);

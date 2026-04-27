@@ -1,19 +1,14 @@
 /**
- * Notification system — sessionStorage-backed for the demo.
+ * Notification system — sessionStorage + Supabase write-through.
  *
- * TODO: Replace sessionStorage with Supabase:
- *   Table: notifications (id, user_id, type, title, body, read, created_at, href, metadata jsonb)
- *
- *   Write:  INSERT INTO notifications (...) VALUES (...)
- *   Read:   SELECT * FROM notifications WHERE user_id = auth.uid() ORDER BY created_at DESC
- *   Update: UPDATE notifications SET read = true WHERE id = $id
- *
- *   Realtime (new notifications pushed to client):
- *     supabase.channel('notifications')
- *       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications',
- *           filter: `user_id=eq.${userId}` }, (payload) => addToLocalState(payload.new))
- *       .subscribe()
+ * All writes persist to both sessionStorage and Supabase.
  */
+
+import {
+  insertNotification as dbInsertNotif,
+  markNotificationRead as dbMarkRead,
+  markAllNotificationsRead as dbMarkAllRead,
+} from "./supabase/db";
 
 export type NotificationType =
   | "offer_sent"       // broker sent a price offer to a carrier
@@ -70,7 +65,11 @@ export function addNotification(
   };
   const existing = getNotifications();
   sessionStorage.setItem(STORAGE_KEY, JSON.stringify([newNotif, ...existing]));
-  // Notify any listeners (e.g. NotificationDropdown) in the same tab
+  dbInsertNotif({
+    id: newNotif.id, type: newNotif.type, title: newNotif.title,
+    body: newNotif.body, role: newNotif.role, href: newNotif.href,
+    metadata: newNotif.metadata,
+  }).catch(console.error);
   window.dispatchEvent(new CustomEvent(NOTIFICATION_EVENT));
   return newNotif;
 }
@@ -80,12 +79,14 @@ export function markNotificationRead(id: string): void {
     n.id === id ? { ...n, read: true } : n
   );
   sessionStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+  dbMarkRead(id).catch(console.error);
   window.dispatchEvent(new CustomEvent(NOTIFICATION_EVENT));
 }
 
 export function markAllNotificationsRead(): void {
   const updated = getNotifications().map((n) => ({ ...n, read: true }));
   sessionStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+  dbMarkAllRead().catch(console.error);
   window.dispatchEvent(new CustomEvent(NOTIFICATION_EVENT));
 }
 

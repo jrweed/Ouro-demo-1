@@ -1,18 +1,11 @@
 /**
- * Invoice system — sessionStorage-backed for the demo.
+ * Invoice system — sessionStorage + Supabase write-through.
  *
  * Invoices are auto-generated when a booking is created.
- *
- * TODO: Replace sessionStorage with Supabase:
- *   Table: invoices (id, invoice_number, booking_id, load_id, conv_id,
- *                    broker_company, carrier_name, origin, destination,
- *                    pickup_date, commodity, temperature, equipment_type,
- *                    distance_miles, driver_name, truck_num,
- *                    freight_charge, total, status, issued_at)
- *
- *   Email delivery: Trigger Resend/SendGrid on INSERT to invoices table,
- *                   attaching a PDF rendered from a React Email template.
+ * All writes persist to both sessionStorage and Supabase.
  */
+
+import { insertInvoice as dbInsertInvoice, updateInvoice as dbUpdateInvoice, type DbInvoice } from "./supabase/db";
 
 export type InvoiceStatus = "pending" | "paid";
 
@@ -74,6 +67,20 @@ function saveInvoices(invoices: Invoice[]): void {
   sessionStorage.setItem(INVOICES_KEY, JSON.stringify(invoices));
 }
 
+function persistInvoiceToSupabase(inv: Invoice): void {
+  const row: DbInvoice = {
+    id: inv.id, invoiceNumber: inv.invoiceNumber, bookingId: inv.bookingId,
+    loadId: inv.loadId, convId: inv.convId, brokerCompany: inv.brokerCompany,
+    carrierName: inv.carrierName, origin: inv.origin, destination: inv.destination,
+    pickupDate: inv.pickupDate, commodity: inv.commodity, temperature: inv.temperature,
+    equipmentType: inv.equipmentType, distanceMiles: inv.distanceMiles,
+    driverName: inv.driverName, truckNum: inv.truckNum,
+    freightCharge: inv.freightCharge, total: inv.total,
+    status: inv.status, issuedAt: inv.issuedAt,
+  };
+  dbInsertInvoice(row).catch(console.error);
+}
+
 function getNextInvoiceNumber(): string {
   const year = new Date().getFullYear();
   const invoices = getInvoices();
@@ -115,6 +122,7 @@ export function createInvoice(data: {
           inv.id === id ? { ...inv, brokerCompany: data.brokerCompany } : inv
         )
       );
+      dbUpdateInvoice(id, { broker_company: data.brokerCompany }).catch(console.error);
       return { ...existing, brokerCompany: data.brokerCompany };
     }
     return existing;
@@ -130,6 +138,7 @@ export function createInvoice(data: {
   };
 
   saveInvoices([invoice, ...getInvoices()]);
+  persistInvoiceToSupabase(invoice);
   return invoice;
 }
 
@@ -140,4 +149,5 @@ export function markInvoicePaid(id: string): void {
       inv.id === id ? { ...inv, status: "paid" as InvoiceStatus } : inv
     )
   );
+  dbUpdateInvoice(id, { status: "paid" }).catch(console.error);
 }

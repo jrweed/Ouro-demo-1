@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { useAuth } from "@/hooks/useAuth";
+import { useRealtimeMessages } from "@/hooks/useRealtimeMessages";
 import {
   getConversations,
   getMessages,
@@ -322,16 +323,15 @@ export default function QuoteInboxPage() {
   const router = useRouter();
   const { user, loading } = useAuth();
 
-  const [convs, setConvs] = useState<Conversation[]>([]);
   const [allLoads, setAllLoads] = useState<StoredLoad[]>([]);
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
   const [messageText, setMessageText] = useState("");
   // Offer input state
   const [showOfferInput, setShowOfferInput] = useState(false);
   const [offerAmount, setOfferAmount] = useState("");
   const [selectedLoadId, setSelectedLoadId] = useState<string>("");
 
+  const { messages, setMessages, convs, refreshConvs, refreshMessages } = useRealtimeMessages(activeConvId);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -344,14 +344,6 @@ export default function QuoteInboxPage() {
     refreshConvs();
     setAllLoads(getStoredLoads());
   }, []);
-
-  function refreshConvs() {
-    const stored = getConversations().sort(
-      (a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime()
-    );
-    setConvs(stored);
-    return stored;
-  }
 
   // Read URL params on mount: conv, offerLoad, offerRate
   useEffect(() => {
@@ -374,14 +366,12 @@ export default function QuoteInboxPage() {
     if (!activeConvId && convs.length > 0) setActiveConvId(convs[0].id);
   }, [convs, activeConvId]);
 
-  // Load messages when active conv changes
+  // Mark as read and scroll when active conv changes
   useEffect(() => {
     if (!activeConvId) return;
-    setMessages(getMessages(activeConvId));
     markConversationRead(activeConvId);
-    refreshConvs();
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 60);
-  }, [activeConvId]);
+  }, [activeConvId, messages]);
 
   // When active conv changes, default the load selector to the conv's own load
   useEffect(() => {
@@ -402,7 +392,7 @@ export default function QuoteInboxPage() {
     if (!activeConvId || !messageText.trim()) return;
     addMessage(activeConvId, { sender: "3pl", body: messageText.trim() });
     setMessageText("");
-    setMessages(getMessages(activeConvId));
+    if (activeConvId) refreshMessages(activeConvId);
     refreshConvs();
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 60);
   }
@@ -422,7 +412,7 @@ export default function QuoteInboxPage() {
     sendOffer(activeConvId, amount, "3pl", loadCtx);
     setShowOfferInput(false);
     setOfferAmount("");
-    setMessages(getMessages(activeConvId));
+    if (activeConvId) refreshMessages(activeConvId);
     refreshConvs();
 
     if (conv) {
@@ -450,7 +440,7 @@ export default function QuoteInboxPage() {
     if (!activeConvId) return;
     const conv = getConversations().find((c) => c.id === activeConvId);
     respondToOffer(activeConvId, "accepted");
-    setMessages(getMessages(activeConvId));
+    if (activeConvId) refreshMessages(activeConvId);
     refreshConvs();
     if (conv?.offer) {
       // Enrich with load data from ch_loads
@@ -490,7 +480,7 @@ export default function QuoteInboxPage() {
     if (!activeConvId) return;
     const conv = getConversations().find((c) => c.id === activeConvId);
     respondToOffer(activeConvId, "declined");
-    setMessages(getMessages(activeConvId));
+    if (activeConvId) refreshMessages(activeConvId);
     refreshConvs();
     if (conv?.offer) {
       addNotification({ type: "offer_declined", title: `Offer declined · ${conv.carrierName}`, body: `${conv.origin} → ${conv.destination}`, role: "3pl", href: `/dashboard/3pl/quotes?conv=${activeConvId}`, metadata: { carrierId: conv.carrierId, carrierName: conv.carrierName } });
@@ -500,7 +490,7 @@ export default function QuoteInboxPage() {
   function handleCounterOffer(amount: number) {
     if (!activeConvId) return;
     respondToOffer(activeConvId, "countered", amount);
-    setMessages(getMessages(activeConvId));
+    if (activeConvId) refreshMessages(activeConvId);
     refreshConvs();
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 60);
   }

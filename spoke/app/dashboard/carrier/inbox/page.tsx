@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { useAuth } from "@/hooks/useAuth";
+import { useRealtimeMessages } from "@/hooks/useRealtimeMessages";
 import {
   getConversations,
   getMessages,
@@ -440,13 +441,13 @@ export default function CarrierInboxPage() {
   const router = useRouter();
   const { user, loading } = useAuth();
 
-  const [convs, setConvs] = useState<Conversation[]>([]);
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
   const [messageText, setMessageText] = useState("");
   const [showQuoteInput, setShowQuoteInput] = useState(false);
   const [quoteAmount, setQuoteAmount] = useState("");
   const [showTruckPicker, setShowTruckPicker] = useState(false);
+
+  const { messages, setMessages, convs, refreshConvs, refreshMessages } = useRealtimeMessages(activeConvId);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -458,14 +459,6 @@ export default function CarrierInboxPage() {
     if (getConversations().length === 0) seedDemoConversations();
     refreshConvs();
   }, []);
-
-  function refreshConvs() {
-    const stored = getConversations().sort(
-      (a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime()
-    );
-    setConvs(stored);
-    return stored;
-  }
 
   // Read conv from URL on mount
   useEffect(() => {
@@ -480,11 +473,9 @@ export default function CarrierInboxPage() {
 
   useEffect(() => {
     if (!activeConvId) return;
-    setMessages(getMessages(activeConvId));
     markConversationRead(activeConvId, "carrier");
-    refreshConvs();
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 60);
-  }, [activeConvId]);
+  }, [activeConvId, messages]);
 
   function selectConv(id: string) {
     setActiveConvId(id);
@@ -498,7 +489,7 @@ export default function CarrierInboxPage() {
     if (!activeConvId || !messageText.trim()) return;
     addMessage(activeConvId, { sender: "carrier", body: messageText.trim() });
     setMessageText("");
-    setMessages(getMessages(activeConvId));
+    if (activeConvId) refreshMessages(activeConvId);
     refreshConvs();
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 60);
   }
@@ -514,7 +505,7 @@ export default function CarrierInboxPage() {
 
     setShowQuoteInput(false);
     setQuoteAmount("");
-    setMessages(getMessages(activeConvId));
+    if (activeConvId) refreshMessages(activeConvId);
     refreshConvs();
 
     if (conv) {
@@ -545,7 +536,7 @@ export default function CarrierInboxPage() {
 
     const conv = getConversations().find((c) => c.id === activeConvId);
     respondToOffer(activeConvId, "accepted", undefined, "carrier");
-    setMessages(getMessages(activeConvId));
+    if (activeConvId) refreshMessages(activeConvId);
     refreshConvs();
 
     if (conv?.offer) {
@@ -592,7 +583,7 @@ export default function CarrierInboxPage() {
     if (!activeConvId) return;
     const conv = getConversations().find((c) => c.id === activeConvId);
     respondToOffer(activeConvId, "declined", undefined, "carrier");
-    setMessages(getMessages(activeConvId));
+    if (activeConvId) refreshMessages(activeConvId);
     refreshConvs();
 
     if (conv) {
@@ -610,7 +601,7 @@ export default function CarrierInboxPage() {
   function handleCounterOffer(amount: number) {
     if (!activeConvId) return;
     respondToOffer(activeConvId, "countered", amount, "carrier");
-    setMessages(getMessages(activeConvId));
+    if (activeConvId) refreshMessages(activeConvId);
     refreshConvs();
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 60);
   }

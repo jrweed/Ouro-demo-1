@@ -59,7 +59,7 @@ interface LoadFormValues {
   weightLbs: string;
   specialRequirements: string;
   targetRate: string;
-  requestQuotes: boolean;
+  showTargetRate: boolean;
 }
 
 const INITIAL_VALUES: LoadFormValues = {
@@ -73,7 +73,7 @@ const INITIAL_VALUES: LoadFormValues = {
   weightLbs: "",
   specialRequirements: "",
   targetRate: "",
-  requestQuotes: false,
+  showTargetRate: false,
 };
 
 import { EQUIPMENT_TYPES, isReeferEquipment } from "@/lib/utils/constants";
@@ -308,8 +308,34 @@ function LocationAutocomplete({
 
 // ─── Main form ────────────────────────────────────────────────────────────────
 
+const FORM_DRAFT_KEY = "ch_load_form_draft";
+
+function saveDraftToSession(data: {
+  values: LoadFormValues;
+  originText: string;
+  destText: string;
+  confirmedOrigin: LocationResult | null;
+  confirmedDest: LocationResult | null;
+}) {
+  try { sessionStorage.setItem(FORM_DRAFT_KEY, JSON.stringify(data)); } catch {}
+}
+
+function loadDraftFromSession(): {
+  values: LoadFormValues;
+  originText: string;
+  destText: string;
+  confirmedOrigin: LocationResult | null;
+  confirmedDest: LocationResult | null;
+} | null {
+  try {
+    const raw = sessionStorage.getItem(FORM_DRAFT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
 export function InputLoadForm() {
   const router = useRouter();
+
   const [values, setValues] = useState<LoadFormValues>(INITIAL_VALUES);
   const [errors, setErrors] = useState<
     Partial<Record<keyof LoadFormValues | "origin" | "destination", string>>
@@ -328,6 +354,27 @@ export function InputLoadForm() {
   const [originText, setOriginText] = useState("");
   const [destText, setDestText] = useState("");
 
+  // Restore draft only when returning via the "Back to load details" button
+  const draftReady = useRef(false);
+  useEffect(() => {
+    const isBack = sessionStorage.getItem("ch_load_form_back") === "1";
+    sessionStorage.removeItem("ch_load_form_back");
+    if (isBack) {
+      const draft = loadDraftFromSession();
+      if (draft) {
+        setValues(draft.values);
+        setOriginText(draft.originText);
+        setDestText(draft.destText);
+        if (draft.confirmedOrigin) setConfirmedOrigin(draft.confirmedOrigin);
+        if (draft.confirmedDest) setConfirmedDest(draft.confirmedDest);
+      }
+    } else {
+      // Not coming back from find-trucks — clear any stale draft
+      try { sessionStorage.removeItem(FORM_DRAFT_KEY); } catch {}
+    }
+    requestAnimationFrame(() => { draftReady.current = true; });
+  }, []);
+
   // Section refs for scroll-spy
   const sectionRefs = useRef<(HTMLElement | null)[]>([null, null, null, null]);
 
@@ -335,6 +382,12 @@ export function InputLoadForm() {
     setValues((prev) => ({ ...prev, [key]: val }));
     setErrors((prev) => ({ ...prev, [key]: undefined }));
   }
+
+  // Auto-save draft to sessionStorage on changes (skip until restore completes)
+  useEffect(() => {
+    if (!draftReady.current) return;
+    saveDraftToSession({ values, originText, destText, confirmedOrigin, confirmedDest });
+  }, [values, originText, destText, confirmedOrigin, confirmedDest]);
 
   // Scroll-spy: update active step based on scroll position
   useEffect(() => {
@@ -373,7 +426,8 @@ export function InputLoadForm() {
     }
     setPricingLoading(true);
     setTimeout(() => {
-      setPricingData(generateMockPricing(origin.label, dest.label, miles || 295, eqType || "dry_van"));
+      const data = generateMockPricing(origin.label, dest.label, miles || 295, eqType || "dry_van");
+      setPricingData(data);
       setPricingLoading(false);
     }, 700);
   }, []);
@@ -388,7 +442,7 @@ export function InputLoadForm() {
     routeReady,
     !!values.pickupDate,
     !!values.equipmentType && !!values.commodity && (!isReeferEquipment(values.equipmentType) || !!values.temperature),
-    true,
+    !!values.targetRate,
   ];
 
   function validate(): boolean {
@@ -399,6 +453,7 @@ export function InputLoadForm() {
     if (!values.equipmentType) next.equipmentType = "Required";
     if (!values.commodity) next.commodity = "Required";
     if (isReeferEquipment(values.equipmentType) && !values.temperature) next.temperature = "Required";
+    if (!values.targetRate) next.targetRate = "Required";
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -450,25 +505,9 @@ export function InputLoadForm() {
       notifiedCarriers: [],
     };
 
-    // Persist to Supabase
-    await createLoad({
-      id: loadId,
-      status: "active",
-      origin: demoLoad.origin,
-      destination: demoLoad.destination,
-      pickupDate: demoLoad.pickupDate,
-      commodity: demoLoad.commodity,
-      temperature: demoLoad.temperature,
-      equipmentType: demoLoad.equipmentType,
-      weightLbs: demoLoad.weightLbs,
-      distanceMiles: demoLoad.distanceMiles || 0,
-      transitMinutes: demoLoad.durationMinutes || 0,
-      targetRate: demoLoad.targetRate,
-      pricingRateMin: demoLoad.pricingRateMin || 0,
-      pricingRateMax: demoLoad.pricingRateMax || 0,
-      createdAt: demoLoad.createdAt,
-    });
-    // Also keep in sessionStorage for find-trucks page (reads active load)
+    // Don't persist to Supabase/My Loads yet — that happens when the user
+    // notifies carriers or explicitly saves the draft on the find-trucks page.
+    // Just store in sessionStorage so find-trucks can read it.
     sessionStorage.setItem("ch_active_load", JSON.stringify(demoLoad));
 
     await new Promise((r) => setTimeout(r, 600));
@@ -647,21 +686,21 @@ export function InputLoadForm() {
                   )}
                 </div>
 
-                <div>
+                <div className="min-w-0">
                   <FieldLabel label="Pickup Window" hint="optional" />
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1">
                     <input
                       type="time"
                       value={values.pickupWindowStart}
                       onChange={(e) => set("pickupWindowStart", e.target.value)}
-                      className={inputClass}
+                      className={`${inputClass} min-w-0`}
                     />
                     <span className="shrink-0 text-xs text-[#9ca3af]">to</span>
                     <input
                       type="time"
                       value={values.pickupWindowEnd}
                       onChange={(e) => set("pickupWindowEnd", e.target.value)}
-                      className={inputClass}
+                      className={`${inputClass} min-w-0`}
                     />
                   </div>
                 </div>
@@ -782,7 +821,7 @@ export function InputLoadForm() {
 
             {/* ── Section 4: Pricing ── */}
             <section ref={(el) => { sectionRefs.current[3] = el; }}>
-              <SectionHeader number={4} title="Pricing" complete={false} />
+              <SectionHeader number={4} title="Pricing" complete={sectionComplete[3]} />
 
               {pricingData && (
                 <div className="mb-4 flex items-start gap-2.5 rounded-lg border border-[#dbeafe] bg-[#eff6ff] px-4 py-3">
@@ -792,14 +831,14 @@ export function InputLoadForm() {
                     <strong>
                       ${pricingData.rateMin.toLocaleString()} – ${pricingData.rateMax.toLocaleString()}
                     </strong>
-                    . Set a target rate or leave blank to let carriers quote freely.
+                    . Your target rate has been pre-filled with the estimated average.
                   </p>
                 </div>
               )}
 
               <div className="grid grid-cols-2 gap-4 items-start">
                 <div>
-                  <FieldLabel label="Your Target Rate" hint="optional" htmlFor="targetRate" />
+                  <FieldLabel label="Your Target Rate" required htmlFor="targetRate" />
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-[#9ca3af]">
                       $
@@ -809,24 +848,24 @@ export function InputLoadForm() {
                       type="number"
                       value={values.targetRate}
                       onChange={(e) => set("targetRate", e.target.value)}
-                      placeholder="1,900"
+                      placeholder={pricingData ? `${Math.round((pricingData.rateMin + pricingData.rateMax) / 2 / 10) * 10}` : "Enter target rate"}
                       className={`${inputClass} pl-7`}
                     />
                   </div>
-                  <p className="mt-1 text-xs text-[#9ca3af]">
-                    Leave blank to let carriers set pricing
-                  </p>
+                  {errors.targetRate && (
+                    <p className="mt-1 text-xs text-[#ef4444]">{errors.targetRate}</p>
+                  )}
                 </div>
 
                 <div className="pt-7">
                   <label className="flex cursor-pointer items-center gap-2.5 text-sm text-[#374151]">
                     <input
                       type="checkbox"
-                      checked={values.requestQuotes}
-                      onChange={(e) => set("requestQuotes", e.target.checked)}
+                      checked={values.showTargetRate}
+                      onChange={(e) => set("showTargetRate", e.target.checked)}
                       className="h-4 w-4 rounded border-[#d1d5db] accent-[#3b82f6]"
                     />
-                    Request quotes from carriers instead
+                    Show carriers target rate
                   </label>
                 </div>
               </div>
@@ -854,7 +893,11 @@ export function InputLoadForm() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-[#3b82f6] to-[#1d4ed8] px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-[#2563eb] hover:to-[#1e40af] disabled:opacity-60 disabled:cursor-not-allowed transition-all"
+                className={`flex items-center gap-2 rounded-lg px-6 py-2.5 text-sm font-semibold text-white shadow-sm disabled:opacity-60 disabled:cursor-not-allowed transition-all ${
+                  sectionComplete.every(Boolean)
+                    ? "bg-gradient-to-r from-[#22c55e] to-[#16a34a] hover:from-[#16a34a] hover:to-[#15803d]"
+                    : "bg-gradient-to-r from-[#3b82f6] to-[#1d4ed8] hover:from-[#2563eb] hover:to-[#1e40af]"
+                }`}
               >
                 {submitting ? (
                   <>

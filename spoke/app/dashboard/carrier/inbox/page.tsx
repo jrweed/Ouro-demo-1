@@ -13,11 +13,9 @@ import {
   RefreshCw,
   MessageSquare,
   ChevronRight,
+  ChevronDown,
   Package,
   X,
-  Truck,
-  MapPin,
-  Star,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { useAuth } from "@/hooks/useAuth";
@@ -30,188 +28,40 @@ import {
   sendOffer,
   respondToOffer,
   markConversationRead,
-  updateConversationTruck,
   type Conversation,
   type Message,
 } from "@/lib/conversations";
-import { createBooking, getBookings } from "@/lib/bookings";
+import { createBooking } from "@/lib/bookings";
 import { addNotification } from "@/lib/notifications";
-import { getTrucks, getDrivers, type Truck as TruckType, type Driver } from "@/lib/fleet";
 
-// ─── Deadhead helpers (mirrors quote-requests page) ───────────────────────────
+// ─── Load type (mirrors ch_loads) ────────────────────────────────────────────
 
-const CITY_COORDS: Record<string, [number, number]> = {
-  "charleston_sc":    [32.7765, -79.9311],
-  "atlanta_ga":       [33.7490, -84.3880],
-  "savannah_ga":      [32.0835, -81.0998],
-  "jacksonville_fl":  [30.3322, -81.6557],
-  "miami_fl":         [25.7617, -80.1918],
-  "charlotte_nc":     [35.2271, -80.8431],
-  "tampa_fl":         [27.9506, -82.4572],
-  "nashville_tn":     [36.1627, -86.7816],
-  "memphis_tn":       [35.1495, -90.0490],
-  "new_orleans_la":   [29.9511, -90.0715],
-  "houston_tx":       [29.7604, -95.3698],
-  "dallas_tx":        [32.7767, -96.7970],
-  "birmingham_al":    [33.5186, -86.8104],
-  "columbia_sc":      [34.0007, -81.0348],
-  "orlando_fl":       [28.5383, -81.3792],
-  "raleigh_nc":       [35.7796, -78.6382],
-  "richmond_va":      [37.5407, -77.4360],
-  "norfolk_va":       [36.8507, -76.2859],
-  "greensboro_nc":    [36.0726, -79.7920],
-};
-
-function cityKey(city: string, state: string): string {
-  return `${city.toLowerCase().replace(/\s+/g, "_")}_${state.toLowerCase()}`;
+interface StoredLoad {
+  id: string;
+  origin: string;
+  destination: string;
+  pickupDate: string;
+  commodity: string;
+  status: "active" | "carriers_notified" | "booked";
+  pricingRateMin?: number;
+  pricingRateMax?: number;
+  notifiedCarriers?: { id: string; carrierName: string; quoteStatus: string }[];
 }
 
-function haversineMiles(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 3958.8;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) ** 2
-    + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+function getStoredLoads(): StoredLoad[] {
+  if (typeof window === "undefined") return [];
+  try { return JSON.parse(sessionStorage.getItem("ch_loads") || "[]"); }
+  catch { return []; }
 }
 
-function estimateDeadhead(truckCity: string, truckState: string, pickupLocation: string): number | null {
-  const truckCoord = CITY_COORDS[cityKey(truckCity, truckState)];
-  const match = pickupLocation.match(/^([^,]+),\s*([A-Z]{2})/);
-  if (!match) return null;
-  const pickupCoord = CITY_COORDS[cityKey(match[1].trim(), match[2].trim())];
-  if (!truckCoord || !pickupCoord) return null;
-  return Math.round(haversineMiles(truckCoord[0], truckCoord[1], pickupCoord[0], pickupCoord[1]));
-}
-
-// ─── Inline truck picker for accept flow ──────────────────────────────────────
-
-function AcceptTruckPicker({
-  pickupLocation,
-  preselectedTruckNum,
-  onConfirm,
-  onCancel,
-}: {
-  pickupLocation: string;
-  preselectedTruckNum?: string;
-  onConfirm: (truckNum: string, driverName: string) => void;
-  onCancel: () => void;
-}) {
-  const [trucks] = useState<TruckType[]>(() => getTrucks());
-  const [drivers] = useState<Driver[]>(() => getDrivers());
-
-  const withMeta = trucks.map((t) => ({
-    ...t,
-    deadhead: estimateDeadhead(t.city, t.state, pickupLocation),
-    driverName: drivers.find((d) => d.assignedTruckId === t.id)?.name ?? null,
-  }));
-  const available = withMeta
-    .filter((t) => t.status === "available")
-    .sort((a, b) => {
-      if (a.deadhead === null && b.deadhead === null) return 0;
-      if (a.deadhead === null) return 1;
-      if (b.deadhead === null) return -1;
-      return a.deadhead - b.deadhead;
-    });
-  const unavailable = withMeta.filter((t) => t.status !== "available");
-  const all = [...available, ...unavailable];
-
-  // Preselect: try to match the existing truckNum on the conversation, otherwise best available
-  const initId =
-    trucks.find((t) => t.truckNum === preselectedTruckNum)?.id ??
-    available[0]?.id ??
-    null;
-  const [selectedId, setSelectedId] = useState<string | null>(initId);
-
-  function handleConfirm() {
-    const truck = trucks.find((t) => t.id === selectedId);
-    if (!truck) return;
-    const driver = drivers.find((d) => d.assignedTruckId === selectedId);
-    onConfirm(truck.truckNum, driver?.name ?? "—");
-  }
-
-  return (
-    <div className="mt-3 rounded-xl border border-[#bbf7d0] bg-[#f0fdf4] p-4">
-      <p className="mb-2 text-[13px] font-semibold text-[#15803d]">
-        Assign a truck to accept this load
-      </p>
-      <p className="mb-3 text-[11px] text-[#6b7280]">
-        Trucks are sorted by deadhead distance to pickup · {pickupLocation}
-      </p>
-
-      <div className="flex flex-col gap-1.5 max-h-64 overflow-y-auto">
-        {all.map((truck, i) => {
-          const isAvail = truck.status === "available";
-          const isSelected = selectedId === truck.id;
-          const isRecommended = i === 0 && isAvail;
-          return (
-            <button
-              key={truck.id}
-              type="button"
-              onClick={() => isAvail && setSelectedId(truck.id)}
-              disabled={!isAvail}
-              className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-all ${
-                isSelected
-                  ? "border-[#16a34a] bg-white"
-                  : isAvail
-                  ? "border-[#e5e7eb] bg-white hover:border-[#86efac]"
-                  : "cursor-not-allowed border-[#f3f4f6] bg-[#fafafa] opacity-50"
-              }`}
-            >
-              <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${isSelected ? "bg-[#dcfce7]" : "bg-[#f3f4f6]"}`}>
-                <Truck size={14} className={isSelected ? "text-[#16a34a]" : "text-[#6b7280]"} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[13px] font-semibold text-[#111827]">Truck {truck.truckNum}</span>
-                  {isRecommended && (
-                    <span className="flex items-center gap-0.5 rounded-full bg-[#16a34a] px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                      <Star size={8} fill="white" /> Best match
-                    </span>
-                  )}
-                  {!isAvail && (
-                    <span className="text-[11px] text-[#9ca3af] capitalize">({truck.status.replace("_", " ")})</span>
-                  )}
-                </div>
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[#6b7280]">
-                  <span>{truck.year} {truck.make} {truck.model}</span>
-                  <span>·</span>
-                  <span className="flex items-center gap-0.5"><MapPin size={9} /> {truck.city}, {truck.state}</span>
-                  {truck.deadhead !== null && (
-                    <>
-                      <span>·</span>
-                      <span className={truck.deadhead < 50 ? "font-medium text-[#16a34a]" : ""}>~{truck.deadhead} mi deadhead</span>
-                    </>
-                  )}
-                  {truck.driverName && <><span>·</span><span>Driver: {truck.driverName}</span></>}
-                </div>
-              </div>
-              {isSelected && <CheckCircle2 size={15} className="shrink-0 text-[#16a34a]" />}
-            </button>
-          );
-        })}
-        {all.length === 0 && (
-          <p className="text-[12px] text-[#9ca3af] italic">No trucks in your fleet.</p>
-        )}
-      </div>
-
-      <div className="mt-3 flex items-center gap-2">
-        <button
-          onClick={handleConfirm}
-          disabled={!selectedId}
-          className="flex items-center gap-1.5 rounded-lg bg-[#16a34a] px-5 py-2 text-sm font-semibold text-white hover:bg-[#15803d] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          <CheckCircle2 size={14} /> Confirm & Accept
-        </button>
-        <button
-          onClick={onCancel}
-          className="rounded-lg border border-[#e5e7eb] bg-white px-4 py-2 text-sm font-medium text-[#4b5563] hover:bg-[#f9fafb] transition-colors"
-        >
-          Cancel
-        </button>
-      </div>
-    </div>
+/** Loads relevant to this conversation. */
+function getRelevantLoads(conv: Conversation, allLoads: StoredLoad[]): StoredLoad[] {
+  // Show loads where this carrier was notified, or all non-booked loads
+  const notified = allLoads.filter((l) =>
+    l.notifiedCarriers?.some((c) => c.id === conv.carrierId)
   );
+  if (notified.length > 0) return notified;
+  return allLoads.filter((l) => l.status !== "booked");
 }
 
 // ─── Demo seed (shared with 3PL inbox) ───────────────────────────────────────
@@ -277,6 +127,56 @@ function timeAgo(isoString: string) {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
+function formatDate(dateStr: string) {
+  return new Date(dateStr + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+const LOAD_STATUS_COLOR: Record<string, { color: string; dot: string }> = {
+  active:            { color: "#2563eb", dot: "#3b82f6" },
+  carriers_notified: { color: "#d97706", dot: "#f59e0b" },
+  booked:            { color: "#16a34a", dot: "#22c55e" },
+};
+
+// ─── Relevant loads banner (mirrors broker view) ─────────────────────────────
+
+function RelevantLoadsBanner({
+  conv,
+  allLoads,
+}: {
+  conv: Conversation;
+  allLoads: StoredLoad[];
+}) {
+  const relevant = getRelevantLoads(conv, allLoads);
+  if (relevant.length === 0) return null;
+
+  return (
+    <div className="border-b border-[#e5e7eb] bg-[#f9fafb] px-5 py-3">
+      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[#9ca3af]">
+        Relevant Loads ({relevant.length})
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {relevant.map((load) => {
+          const sc = LOAD_STATUS_COLOR[load.status] ?? LOAD_STATUS_COLOR.active;
+          return (
+            <div
+              key={load.id}
+              className="flex items-center gap-2 rounded-lg border border-[#e5e7eb] bg-white px-3 py-2 text-[12px]"
+            >
+              <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: sc.dot }} />
+              <span className="font-medium text-[#111827] truncate max-w-[120px]">{load.origin}</span>
+              <ArrowRight size={10} className="shrink-0 text-[#9ca3af]" />
+              <span className="font-medium text-[#111827] truncate max-w-[120px]">{load.destination}</span>
+              {load.pickupDate && (
+                <span className="text-[#9ca3af]">· {formatDate(load.pickupDate)}</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Offer banner (carrier perspective) ──────────────────────────────────────
 
 function OfferBanner({
@@ -300,14 +200,14 @@ function OfferBanner({
   const canRespond = !isResolved && offer.from === "3pl";
 
   if (isResolved) {
-    return (
+    const content = (
       <div className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium ${
         offer.status === "accepted"
-          ? "border-[#bbf7d0] bg-[#f0fdf4] text-[#16a34a]"
+          ? "border-[#bbf7d0] bg-[#f0fdf4] text-[#16a34a] hover:bg-[#dcfce7] transition-colors"
           : "border-[#fecaca] bg-[#fef2f2] text-[#dc2626]"
       }`}>
         {offer.status === "accepted" ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
-        <div>
+        <div className="flex-1">
           <span>{offer.status === "accepted" ? `Offer accepted · $${offer.amount.toLocaleString()}` : "Offer declined"}</span>
           {offer.loadOrigin && (
             <span className="ml-2 text-[12px] opacity-70">
@@ -315,8 +215,13 @@ function OfferBanner({
             </span>
           )}
         </div>
+        {offer.status === "accepted" && <ChevronRight size={16} className="shrink-0 opacity-50" />}
       </div>
     );
+    if (offer.status === "accepted") {
+      return <Link href="/dashboard/carrier/loads">{content}</Link>;
+    }
+    return content;
   }
 
   return (
@@ -349,7 +254,7 @@ function OfferBanner({
             </button>
           </div>
         )}
-        {!canRespond && !showCounter && (
+        {!canRespond && !isResolved && !showCounter && (
           <span className="text-[12px] text-[#6b7280]">Awaiting broker response</span>
         )}
       </div>
@@ -388,7 +293,7 @@ function OfferBanner({
   );
 }
 
-// ─── Message bubble (carrier perspective: carrier = right/green) ──────────────
+// ─── Message bubble (carrier perspective: carrier = right/blue) ──────────────
 
 function MessageBubble({ msg }: { msg: Message }) {
   const isMe = msg.sender === "carrier"; // carrier is "you"
@@ -399,21 +304,31 @@ function MessageBubble({ msg }: { msg: Message }) {
     let color = "text-[#6b7280]";
     if (action === "sent") {
       text = `${isMe ? "You" : "Broker"} sent an offer · $${amount.toLocaleString()}`;
-      color = "text-[#16a34a]";
+      color = "text-[#3b82f6]";
     } else if (action === "countered") {
       text = `${isMe ? "You" : "Broker"} countered $${previousAmount?.toLocaleString()} → $${amount.toLocaleString()}`;
       color = "text-[#d97706]";
     } else if (action === "accepted") {
-      text = `Offer accepted · $${amount.toLocaleString()}`;
+      text = msg.body || `Offer accepted · $${amount.toLocaleString()}`;
       color = "text-[#16a34a]";
     } else if (action === "declined") {
       text = "Offer declined";
       color = "text-[#dc2626]";
     }
+    const isAccepted = action === "accepted";
     return (
       <div className="flex items-center gap-3 py-1">
         <div className="h-px flex-1 bg-[#e5e7eb]" />
-        <span className={`shrink-0 text-[12px] font-medium ${color}`}>{text}</span>
+        {isAccepted ? (
+          <Link
+            href="/dashboard/carrier/loads"
+            className={`shrink-0 text-[12px] font-medium ${color} hover:underline cursor-pointer`}
+          >
+            {text} →
+          </Link>
+        ) : (
+          <span className={`shrink-0 text-[12px] font-medium ${color}`}>{text}</span>
+        )}
         <div className="h-px flex-1 bg-[#e5e7eb]" />
       </div>
     );
@@ -423,11 +338,11 @@ function MessageBubble({ msg }: { msg: Message }) {
     <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
       <div className={`max-w-[72%] rounded-2xl px-4 py-2.5 text-[14px] leading-relaxed ${
         isMe
-          ? "rounded-br-sm bg-[#16a34a] text-white"
+          ? "rounded-br-sm bg-[#3b82f6] text-white"
           : "rounded-bl-sm bg-[#f3f4f6] text-[#111827]"
       }`}>
         {msg.body}
-        <p className={`mt-1 text-[11px] ${isMe ? "text-[#bbf7d0]" : "text-[#9ca3af]"}`}>
+        <p className={`mt-1 text-[11px] ${isMe ? "text-[#bfdbfe]" : "text-[#9ca3af]"}`}>
           {timeAgo(msg.timestamp)}
         </p>
       </div>
@@ -441,12 +356,12 @@ export default function CarrierInboxPage() {
   const router = useRouter();
   const { user, loading } = useAuth();
 
+  const [allLoads, setAllLoads] = useState<StoredLoad[]>([]);
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [messageText, setMessageText] = useState("");
   const [showQuoteInput, setShowQuoteInput] = useState(false);
   const [quoteAmount, setQuoteAmount] = useState("");
-  const [showTruckPicker, setShowTruckPicker] = useState(false);
-
+  const [selectedLoadId, setSelectedLoadId] = useState<string>("");
   const { messages, setMessages, convs, refreshConvs, refreshMessages } = useRealtimeMessages(activeConvId);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -458,6 +373,7 @@ export default function CarrierInboxPage() {
   useEffect(() => {
     if (getConversations().length === 0) seedDemoConversations();
     refreshConvs();
+    setAllLoads(getStoredLoads());
   }, []);
 
   // Read conv from URL on mount
@@ -467,9 +383,20 @@ export default function CarrierInboxPage() {
     if (convId) setActiveConvId(convId);
   }, []);
 
+  // Auto-select first conv if none (prefer active negotiations over completed)
   useEffect(() => {
-    if (!activeConvId && convs.length > 0) setActiveConvId(convs[0].id);
+    if (!activeConvId && convs.length > 0) {
+      const active = convs.find((c) => !c.offer || c.offer.status !== "accepted");
+      setActiveConvId(active?.id ?? convs[0].id);
+    }
   }, [convs, activeConvId]);
+
+  // When active conv changes, default the load selector to the conv's own load
+  useEffect(() => {
+    if (!activeConvId) return;
+    const conv = getConversations().find((c) => c.id === activeConvId);
+    if (conv && !selectedLoadId) setSelectedLoadId(conv.loadId);
+  }, [activeConvId]);
 
   useEffect(() => {
     if (!activeConvId) return;
@@ -480,8 +407,11 @@ export default function CarrierInboxPage() {
   function selectConv(id: string) {
     setActiveConvId(id);
     setShowQuoteInput(false);
-    setShowTruckPicker(false);
     setMessageText("");
+    setQuoteAmount("");
+    // Update load selector to this conversation's load
+    const conv = getConversations().find((c) => c.id === id);
+    if (conv) setSelectedLoadId(conv.loadId);
     window.history.replaceState(null, "", `/dashboard/carrier/inbox?conv=${id}`);
   }
 
@@ -497,23 +427,26 @@ export default function CarrierInboxPage() {
   function handleSendQuote() {
     const amount = parseFloat(quoteAmount.replace(/[^0-9.]/g, ""));
     if (!activeConvId || !amount || amount <= 0) return;
+
     const conv = getConversations().find((c) => c.id === activeConvId);
-
-    sendOffer(activeConvId, amount, "carrier", conv
+    const chosenLoad = allLoads.find((l) => l.id === selectedLoadId);
+    const loadCtx = chosenLoad
+      ? { loadId: chosenLoad.id, origin: chosenLoad.origin, destination: chosenLoad.destination }
+      : conv
       ? { loadId: conv.loadId, origin: conv.origin, destination: conv.destination }
-      : undefined);
+      : undefined;
 
+    sendOffer(activeConvId, amount, "carrier", loadCtx);
     setShowQuoteInput(false);
     setQuoteAmount("");
     if (activeConvId) refreshMessages(activeConvId);
     refreshConvs();
 
     if (conv) {
-      // Notify broker that a quote was received
       addNotification({
         type: "quote_received",
         title: `Quote received from ${conv.carrierName}`,
-        body: `$${amount.toLocaleString()} · ${conv.origin} → ${conv.destination}`,
+        body: `$${amount.toLocaleString()} · ${loadCtx?.origin ?? conv.origin} → ${loadCtx?.destination ?? conv.destination}`,
         role: "3pl",
         href: `/dashboard/3pl/quotes?conv=${activeConvId}`,
         metadata: { carrierId: conv.carrierId, carrierName: conv.carrierName, quotedRate: amount },
@@ -523,60 +456,69 @@ export default function CarrierInboxPage() {
   }
 
   function handleAcceptOffer() {
-    // Show truck picker first — acceptance happens in handleAcceptWithTruck
-    setShowTruckPicker(true);
-  }
-
-  function handleAcceptWithTruck(truckNum: string, driverName: string) {
     if (!activeConvId) return;
-    setShowTruckPicker(false);
 
-    // Update conversation with selected truck before accepting
-    updateConversationTruck(activeConvId, truckNum, driverName);
-
+    // Capture conversation and offer BEFORE mutating state
     const conv = getConversations().find((c) => c.id === activeConvId);
-    respondToOffer(activeConvId, "accepted", undefined, "carrier");
-    if (activeConvId) refreshMessages(activeConvId);
+    if (!conv?.offer) return;
+    const offerAmount = conv.offer.amount;
+    const convId = activeConvId;
+    // Use the offer's loadId (set when broker/carrier selects a specific load), fall back to conversation loadId
+    const effectiveLoadId = conv.offer.loadId || conv.loadId;
+    const effectiveOrigin = conv.offer.loadOrigin || conv.origin;
+    const effectiveDestination = conv.offer.loadDestination || conv.destination;
+
+    // Accept the offer
+    respondToOffer(convId, "accepted", undefined, "carrier");
+
+    // Create booking with captured data BEFORE async refreshes
+    let loadExtra: { pickupDate?: string; commodity?: string; temperature?: string; equipmentType?: string; distanceMiles?: number } = {};
+    try {
+      const loads = JSON.parse(sessionStorage.getItem("ch_loads") || "[]");
+      const load = loads.find((l: { id: string }) => l.id === effectiveLoadId);
+      if (load) {
+        loadExtra = {
+          pickupDate: load.pickupDate,
+          commodity: load.commodity,
+          temperature: load.temperature,
+          equipmentType: load.equipmentType,
+          distanceMiles: load.distanceMiles,
+        };
+      }
+    } catch { /* ignore */ }
+
+    createBooking({
+      convId,
+      loadId: effectiveLoadId,
+      carrierId: conv.carrierId,
+      carrierName: conv.carrierName,
+      driverName: conv.driverName || "—",
+      truckNum: conv.truckNum || "TBD",
+      origin: effectiveOrigin,
+      destination: effectiveDestination,
+      acceptedRate: offerAmount,
+      ...loadExtra,
+    });
+
+    // Refresh UI AFTER booking is created (these are async)
+    refreshMessages(convId);
     refreshConvs();
 
-    if (conv?.offer) {
-      let loadExtra: { pickupDate?: string; commodity?: string; temperature?: string; equipmentType?: string; distanceMiles?: number } = {};
-      try {
-        const loads = JSON.parse(sessionStorage.getItem("ch_loads") || "[]");
-        const load = loads.find((l: { id: string }) => l.id === conv.loadId);
-        if (load) {
-          loadExtra = {
-            pickupDate: load.pickupDate,
-            commodity: load.commodity,
-            temperature: load.temperature,
-            equipmentType: load.equipmentType,
-            distanceMiles: load.distanceMiles,
-          };
-        }
-      } catch { /* ignore */ }
-
-      createBooking({
-        convId: activeConvId,
-        loadId: conv.loadId,
-        carrierId: conv.carrierId,
-        carrierName: conv.carrierName,
-        driverName,
-        truckNum,
-        origin: conv.origin,
-        destination: conv.destination,
-        acceptedRate: conv.offer.amount,
-        ...loadExtra,
-      });
-
-      addNotification({
-        type: "offer_accepted",
-        title: `Offer accepted · ${conv.carrierName}`,
-        body: `$${conv.offer.amount.toLocaleString()} · ${conv.origin} → ${conv.destination}`,
-        role: "3pl",
-        href: `/dashboard/3pl/quotes?conv=${activeConvId}`,
-        metadata: { carrierId: conv.carrierId, carrierName: conv.carrierName, offeredRate: conv.offer.amount },
-      });
-    }
+    addNotification({
+      type: "offer_accepted",
+      title: `Offer accepted · ${conv.carrierName}`,
+      body: `$${offerAmount.toLocaleString()} · ${effectiveOrigin} → ${effectiveDestination}`,
+      role: "3pl",
+      href: `/dashboard/3pl/quotes?conv=${convId}`,
+      metadata: { carrierId: conv.carrierId, carrierName: conv.carrierName, offeredRate: offerAmount },
+    });
+    addNotification({
+      type: "offer_accepted",
+      title: `Booking confirmed`,
+      body: `$${offerAmount.toLocaleString()} · ${effectiveOrigin} → ${effectiveDestination}`,
+      role: "carrier",
+      href: `/dashboard/carrier/loads`,
+    });
   }
 
   function handleDeclineOffer() {
@@ -608,6 +550,7 @@ export default function CarrierInboxPage() {
 
   const activeConv = convs.find((c) => c.id === activeConvId) ?? null;
   const totalUnread = convs.reduce((s, c) => s + (c.unreadCarrier ?? 0), 0);
+  const relevantLoads = activeConv ? getRelevantLoads(activeConv, allLoads) : [];
 
   if (loading || !user) {
     return (
@@ -625,8 +568,8 @@ export default function CarrierInboxPage() {
 
       <div className="mb-5 flex items-center justify-between">
         <div>
-          <h1 className="text-[26px] font-bold tracking-tight text-[#111827]">Inbox</h1>
-          <p className="mt-1 text-sm text-[#6b7280]">Messages and offers from brokers</p>
+          <h1 className="text-[26px] font-bold tracking-tight text-[#111827]">Messages</h1>
+          <p className="mt-1 text-sm text-[#6b7280]">Manage conversations and offers with brokers</p>
         </div>
         {totalUnread > 0 && (
           <span className="flex items-center gap-1.5 rounded-full bg-[#ef4444] px-3 py-1 text-[12px] font-semibold text-white">
@@ -653,27 +596,31 @@ export default function CarrierInboxPage() {
                 <p className="mt-1 text-xs text-[#9ca3af]">Brokers will message you here about loads.</p>
               </div>
             ) : (
-              convs.map((conv) => {
+              [...convs].sort((a, b) => {
+                const aCompleted = a.offer?.status === "accepted" ? 1 : 0;
+                const bCompleted = b.offer?.status === "accepted" ? 1 : 0;
+                if (aCompleted !== bCompleted) return aCompleted - bCompleted;
+                return new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime();
+              }).map((conv) => {
                 const isActive = conv.id === activeConvId;
                 const unread = conv.unreadCarrier ?? 0;
                 const offerBadge =
-                  conv.offer?.status === "accepted" ? { label: "Accepted", color: "#16a34a", bg: "#f0fdf4" }
+                  conv.offer?.status === "accepted" ? { label: "Booked", color: "#16a34a", bg: "#f0fdf4" }
                   : conv.offer?.status === "declined" ? { label: "Declined", color: "#dc2626", bg: "#fef2f2" }
                   : conv.offer?.from === "3pl" && conv.offer.status === "pending" ? { label: "Offer received", color: "#d97706", bg: "#fffbeb" }
                   : conv.offer?.from === "carrier" && conv.offer.status === "pending" ? { label: "Quote sent", color: "#2563eb", bg: "#eff6ff" }
                   : null;
                 return (
                   <button key={conv.id} onClick={() => selectConv(conv.id)}
-                    className={`w-full border-b border-[#f3f4f6] px-4 py-3.5 text-left transition-colors last:border-0 ${isActive ? "bg-[#f0fdf4]" : "hover:bg-[#f9fafb]"}`}
+                    className={`w-full border-b border-[#f3f4f6] px-4 py-3.5 text-left transition-colors last:border-0 ${isActive ? "bg-[#eff6ff]" : "hover:bg-[#f9fafb]"}`}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <p className={`truncate text-[13px] ${isActive ? "font-semibold text-[#15803d]" : "font-semibold text-[#111827]"}`}>
-                        {/* Show broker company context — in demo we use the load route */}
-                        {conv.origin.split(",")[1]?.trim() ?? conv.origin} Broker
+                      <p className={`truncate text-[13px] ${isActive ? "font-semibold text-[#1d4ed8]" : "font-semibold text-[#111827]"}`}>
+                        {conv.carrierName}
                       </p>
                       <div className="flex shrink-0 items-center gap-1.5">
                         {unread > 0 && (
-                          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#22c55e] px-1.5 text-[10px] font-bold text-white">{unread}</span>
+                          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#3b82f6] px-1.5 text-[10px] font-bold text-white">{unread}</span>
                         )}
                         <span className="text-[11px] text-[#9ca3af]">{timeAgo(conv.lastActivity)}</span>
                       </div>
@@ -700,11 +647,11 @@ export default function CarrierInboxPage() {
         {activeConv ? (
           <div className="flex flex-1 flex-col min-w-0">
 
-            {/* Header */}
+            {/* Header (mirrors broker: shows carrier name, truck/driver, route, link) */}
             <div className="flex items-center justify-between border-b border-[#f3f4f6] px-5 py-3.5">
               <div>
                 <p className="text-[15px] font-semibold text-[#111827]">
-                  Load: {activeConv.origin} → {activeConv.destination}
+                  {activeConv.origin} → {activeConv.destination}
                 </p>
                 <p className="flex items-center gap-1 text-[12px] text-[#6b7280]">
                   Truck {activeConv.truckNum} · {activeConv.driverName}
@@ -717,6 +664,9 @@ export default function CarrierInboxPage() {
               </Link>
             </div>
 
+            {/* Relevant loads banner */}
+            <RelevantLoadsBanner conv={activeConv} allLoads={allLoads} />
+
             {/* Offer banner */}
             {activeConv.offer && (
               <div className="border-b border-[#e5e7eb] px-5 py-3">
@@ -726,14 +676,6 @@ export default function CarrierInboxPage() {
                   onDecline={handleDeclineOffer}
                   onCounter={handleCounterOffer}
                 />
-                {showTruckPicker && activeConv.offer.from === "3pl" && activeConv.offer.status === "pending" && (
-                  <AcceptTruckPicker
-                    pickupLocation={activeConv.origin}
-                    preselectedTruckNum={activeConv.truckNum}
-                    onConfirm={handleAcceptWithTruck}
-                    onCancel={() => setShowTruckPicker(false)}
-                  />
-                )}
               </div>
             )}
 
@@ -742,7 +684,7 @@ export default function CarrierInboxPage() {
               {messages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
                   <Package size={28} className="mb-2 text-[#d1d5db]" />
-                  <p className="text-sm text-[#9ca3af]">No messages yet</p>
+                  <p className="text-sm text-[#9ca3af]">No messages yet — say something!</p>
                 </div>
               ) : (
                 messages.map((msg) => <MessageBubble key={msg.id} msg={msg} />)
@@ -750,15 +692,45 @@ export default function CarrierInboxPage() {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Quote input panel */}
+            {/* Quote input panel (mirrors broker offer input — with load selector) */}
             {showQuoteInput && (
-              <div className="border-t border-[#e5e7eb] bg-[#f0fdf4] px-5 py-4 space-y-2">
+              <div className="border-t border-[#e5e7eb] bg-[#eff6ff] px-5 py-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-[12px] font-semibold uppercase tracking-wider text-[#16a34a]">Send a quote</p>
+                  <p className="text-[12px] font-semibold uppercase tracking-wider text-[#3b82f6]">Send a quote</p>
                   <button onClick={() => { setShowQuoteInput(false); setQuoteAmount(""); }} className="rounded p-1 text-[#9ca3af] hover:text-[#374151] transition-colors">
                     <X size={14} />
                   </button>
                 </div>
+
+                {/* Load selector */}
+                <div>
+                  <label className="mb-1 block text-[11px] font-semibold text-[#6b7280]">Which load is this quote for?</label>
+                  <div className="relative">
+                    <select
+                      value={selectedLoadId}
+                      onChange={(e) => setSelectedLoadId(e.target.value)}
+                      className="w-full appearance-none rounded-lg border border-[#3b82f6] bg-white px-3 py-2 pr-8 text-[13px] font-medium text-[#111827] outline-none"
+                    >
+                      <option value="">— Select a load —</option>
+                      {relevantLoads.length > 0 ? (
+                        relevantLoads.map((l) => (
+                          <option key={l.id} value={l.id}>
+                            {l.origin} → {l.destination}
+                            {l.pickupDate ? ` · ${formatDate(l.pickupDate)}` : ""}
+                            {l.pricingRateMin && l.pricingRateMax ? ` · Market $${l.pricingRateMin.toLocaleString()}–$${l.pricingRateMax.toLocaleString()}` : ""}
+                          </option>
+                        ))
+                      ) : (
+                        <option value={activeConv.loadId}>
+                          {activeConv.origin} → {activeConv.destination}
+                        </option>
+                      )}
+                    </select>
+                    <ChevronDown size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[#9ca3af]" />
+                  </div>
+                </div>
+
+                {/* Amount + send */}
                 <div className="flex items-center gap-2">
                   <span className="text-[14px] font-semibold text-[#374151]">$</span>
                   <input
@@ -767,12 +739,12 @@ export default function CarrierInboxPage() {
                     onChange={(e) => setQuoteAmount(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleSendQuote()}
                     autoFocus
-                    className="flex-1 rounded-lg border border-[#16a34a] bg-white px-3 py-2 text-[14px] font-semibold text-[#111827] placeholder:font-normal placeholder:text-[#9ca3af] outline-none"
+                    className="flex-1 rounded-lg border border-[#3b82f6] bg-white px-3 py-2 text-[14px] font-semibold text-[#111827] placeholder:font-normal placeholder:text-[#9ca3af] outline-none"
                   />
                   <button
                     onClick={handleSendQuote}
-                    disabled={!quoteAmount}
-                    className="flex items-center gap-1.5 rounded-lg bg-[#16a34a] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#15803d] disabled:opacity-40 transition-colors"
+                    disabled={!quoteAmount || !selectedLoadId}
+                    className="flex items-center gap-1.5 rounded-lg bg-[#3b82f6] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#2563eb] disabled:opacity-40 transition-colors"
                   >
                     <DollarSign size={13} /> Send Quote
                   </button>
@@ -787,7 +759,7 @@ export default function CarrierInboxPage() {
                   onClick={() => { setShowQuoteInput((v) => !v); setQuoteAmount(""); }}
                   title="Send a quote"
                   className={`flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-2 text-[13px] font-semibold transition-colors ${
-                    showQuoteInput ? "border-[#16a34a] bg-[#f0fdf4] text-[#15803d]" : "border-[#d1d5db] text-[#374151] hover:border-[#16a34a] hover:text-[#15803d]"
+                    showQuoteInput ? "border-[#3b82f6] bg-[#eff6ff] text-[#2563eb]" : "border-[#d1d5db] text-[#374151] hover:border-[#3b82f6] hover:text-[#2563eb]"
                   }`}
                 >
                   <DollarSign size={14} /> Quote
@@ -797,12 +769,12 @@ export default function CarrierInboxPage() {
                   value={messageText}
                   onChange={(e) => setMessageText(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
-                  className="flex-1 rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-4 py-2 text-[14px] text-[#111827] placeholder:text-[#9ca3af] outline-none focus:border-[#16a34a] focus:bg-white transition-colors"
+                  className="flex-1 rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-4 py-2 text-[14px] text-[#111827] placeholder:text-[#9ca3af] outline-none focus:border-[#3b82f6] focus:bg-white transition-colors"
                 />
                 <button
                   onClick={handleSendMessage}
                   disabled={!messageText.trim()}
-                  className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#16a34a] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#15803d] disabled:opacity-40 transition-colors"
+                  className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#3b82f6] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#2563eb] disabled:opacity-40 transition-colors"
                 >
                   <Send size={14} /> Send
                 </button>

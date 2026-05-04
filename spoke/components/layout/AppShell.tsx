@@ -22,7 +22,7 @@ export function AppShell({
   children,
 }: AppShellProps) {
   return (
-    <div className="flex min-h-screen flex-col bg-[#f9fafb] font-sans">
+    <div className="app-shell flex min-h-screen flex-col bg-[#f9fafb] font-sans">
       <TopBar
         role={role}
         companyName={companyName}

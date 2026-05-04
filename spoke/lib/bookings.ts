@@ -15,6 +15,12 @@ export type ShipmentStatus =
   | "in_transit"
   | "delivered";
 
+export interface StatusEvent {
+  status: ShipmentStatus;
+  timestamp: string;
+  note?: string;
+}
+
 export interface Booking {
   id: string; // `booking-${convId}`
   convId: string;
@@ -34,6 +40,7 @@ export interface Booking {
   distanceMiles?: number;
   createdAt: string;
   shipmentStatus: ShipmentStatus;
+  statusHistory?: StatusEvent[];
 }
 
 const BOOKINGS_KEY = "ch_bookings";
@@ -72,7 +79,7 @@ function saveBookings(bookings: Booking[]): void {
   sessionStorage.setItem(BOOKINGS_KEY, JSON.stringify(bookings));
 }
 
-function persistBookingToSupabase(b: Booking): void {
+async function persistBookingToSupabase(b: Booking): Promise<void> {
   const dbRow: DbBooking = {
     id: b.id, convId: b.convId, loadId: b.loadId, carrierId: b.carrierId,
     carrierName: b.carrierName, driverName: b.driverName, truckNum: b.truckNum,
@@ -81,7 +88,11 @@ function persistBookingToSupabase(b: Booking): void {
     equipmentType: b.equipmentType, distanceMiles: b.distanceMiles,
     shipmentStatus: b.shipmentStatus, createdAt: b.createdAt,
   };
-  dbInsertBooking(dbRow).catch(console.error);
+  try {
+    await dbInsertBooking(dbRow);
+  } catch (err) {
+    console.error("[bookings] Failed to persist to Supabase:", b.id, err);
+  }
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -103,17 +114,23 @@ export function createBooking(data: {
   equipmentType?: string;
   distanceMiles?: number;
 }): Booking {
-  const id = `booking-${data.convId}`;
+  const id = `booking-${data.convId}-${data.loadId}`;
 
-  // Idempotent — don't create a duplicate booking for the same conversation
+  // Idempotent — don't create a duplicate booking for the same conversation+load
   const existing = getBookings().find((b) => b.id === id);
-  if (existing) return existing;
+  if (existing) {
+    // Already in sessionStorage — still ensure it's persisted to Supabase
+    persistBookingToSupabase(existing);
+    return existing;
+  }
 
+  const now = new Date().toISOString();
   const booking: Booking = {
     ...data,
     id,
-    createdAt: new Date().toISOString(),
+    createdAt: now,
     shipmentStatus: "confirmed",
+    statusHistory: [{ status: "confirmed", timestamp: now, note: "Booking confirmed" }],
   };
   saveBookings([booking, ...getBookings()]);
   persistBookingToSupabase(booking);
@@ -133,8 +150,15 @@ export function createBooking(data: {
   return booking;
 }
 
+const STATUS_NOTES: Record<ShipmentStatus, string> = {
+  confirmed: "Booking confirmed",
+  pickup_scheduled: "Pickup scheduled",
+  in_transit: "Shipment picked up — in transit",
+  delivered: "Shipment delivered",
+};
+
 /** Advance the shipment status to the next step. */
-export function advanceBookingStatus(bookingId: string): Booking | null {
+export function advanceBookingStatus(bookingId: string, note?: string): Booking | null {
   const bookings = getBookings();
   const booking = bookings.find((b) => b.id === bookingId);
   if (!booking) return null;
@@ -143,23 +167,49 @@ export function advanceBookingStatus(bookingId: string): Booking | null {
   if (idx === SHIPMENT_STATUS_ORDER.length - 1) return booking; // already delivered
 
   const nextStatus = SHIPMENT_STATUS_ORDER[idx + 1];
-  const updated = { ...booking, shipmentStatus: nextStatus };
+  const now = new Date().toISOString();
+  const event: StatusEvent = {
+    status: nextStatus,
+    timestamp: now,
+    note: note || STATUS_NOTES[nextStatus],
+  };
+  const updated = {
+    ...booking,
+    shipmentStatus: nextStatus,
+    statusHistory: [...(booking.statusHistory || []), event],
+  };
   saveBookings(bookings.map((b) => (b.id === bookingId ? updated : b)));
-  dbUpdateBooking(bookingId, { shipment_status: nextStatus }).catch(console.error);
+  dbUpdateBooking(bookingId, {
+    shipment_status: nextStatus,
+  }).catch(console.error);
   return updated;
 }
 
 /** Directly set a booking's shipment status. */
 export function setBookingStatus(
   bookingId: string,
-  status: ShipmentStatus
+  status: ShipmentStatus,
+  note?: string
 ): void {
+  const now = new Date().toISOString();
+  const event: StatusEvent = { status, timestamp: now, note: note || STATUS_NOTES[status] };
   saveBookings(
     getBookings().map((b) =>
-      b.id === bookingId ? { ...b, shipmentStatus: status } : b
+      b.id === bookingId
+        ? { ...b, shipmentStatus: status, statusHistory: [...(b.statusHistory || []), event] }
+        : b
     )
   );
-  dbUpdateBooking(bookingId, { shipment_status: status }).catch(console.error);
+  const booking = getBookings().find((b) => b.id === bookingId);
+  dbUpdateBooking(bookingId, {
+    shipment_status: status,
+  }).catch(console.error);
+}
+
+/** Get the status history for a booking. */
+export function getBookingHistory(bookingId: string): StatusEvent[] {
+  const booking = getBookings().find((b) => b.id === bookingId);
+  return booking?.statusHistory || [];
 }
 
 /** Update the truck and driver assigned to a booking. */

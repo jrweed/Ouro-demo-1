@@ -132,3 +132,31 @@
     @apply bg-background text-foreground font-sans antialiased;
   }
 }
+
+/* ─── Print styles (must come after all Tailwind imports) ────────────────────── */
+/* Using @layer is avoided here so these rules have maximum specificity */
+@media print {
+  header.sticky,
+  .app-shell > header {
+    display: none !important;
+  }
+
+  aside {
+    display: none !important;
+  }
+
+  body,
+  .app-shell {
+    background: white !important;
+  }
+
+  .app-shell main {
+    padding: 0 !important;
+    max-width: none !important;
+    width: 100% !important;
+  }
+
+  .print\:hidden {
+    display: none !important;
+  }
+}

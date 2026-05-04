@@ -13,6 +13,7 @@ import {
   Bell,
   ChevronRight,
   FileText,
+  Trash2,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { useAuth } from "@/hooks/useAuth";
@@ -68,11 +69,12 @@ function formatDate(dateStr: string) {
 }
 
 import { equipmentLabel as equipLabel } from "@/lib/utils/constants";
-import { getLoads } from "@/lib/supabase/db";
+import { getLoads, deleteLoad, deleteConversationsByLoad } from "@/lib/supabase/db";
+import { deleteConversationsByLoadId } from "@/lib/conversations";
 
 // ─── Load row card ─────────────────────────────────────────────────────────────
 
-function LoadCard({ load }: { load: StoredLoad }) {
+function LoadCard({ load, onDelete }: { load: StoredLoad; onDelete: (id: string) => void }) {
   const sc = STATUS_CONFIG[load.status] ?? STATUS_CONFIG.active;
   const notifiedCount = load.notifiedCarriers?.length ?? 0;
 
@@ -148,6 +150,20 @@ function LoadCard({ load }: { load: StoredLoad }) {
           <p className="mt-0.5 text-[11px] text-[#9ca3af]">{timeAgo(load.createdAt)}</p>
         </div>
 
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (confirm(`Delete load ${load.origin} → ${load.destination}?`)) {
+              onDelete(load.id);
+            }
+          }}
+          className="shrink-0 rounded-lg p-1.5 text-[#d1d5db] hover:bg-[#fef2f2] hover:text-[#ef4444] transition-colors"
+          title="Delete load"
+        >
+          <Trash2 size={15} />
+        </button>
+
         <ChevronRight size={16} className="shrink-0 text-[#d1d5db]" />
       </div>
     </Link>
@@ -170,6 +186,13 @@ export default function MyLoadsPage() {
   useEffect(() => {
     getLoads().then((data) => setLoads(data as unknown as StoredLoad[])).catch(() => setLoads([]));
   }, []);
+
+  async function handleDelete(id: string) {
+    await deleteLoad(id);
+    deleteConversationsByLoadId(id);
+    deleteConversationsByLoad(id).catch(console.error);
+    setLoads((prev) => prev.filter((l) => l.id !== id));
+  }
 
   const filtered =
     filter === "all" ? loads : loads.filter((l) => l.status === filter);
@@ -271,7 +294,7 @@ export default function MyLoadsPage() {
       ) : (
         <div className="flex flex-col gap-2.5">
           {filtered.map((load) => (
-            <LoadCard key={load.id} load={load} />
+            <LoadCard key={load.id} load={load} onDelete={handleDelete} />
           ))}
         </div>
       )}

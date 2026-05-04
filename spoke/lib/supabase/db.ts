@@ -14,9 +14,9 @@ function supabase() {
 }
 
 /** Check Supabase response and log errors. Returns true if OK. */
-function check(result: { error: { message: string; code?: string } | null }, label: string): boolean {
+function check(result: { error: { message: string; code?: string; details?: string; hint?: string } | null }, label: string): boolean {
   if (result.error) {
-    console.error(`[supabase] ${label}:`, result.error.message, result.error.code);
+    console.error(`[supabase] ✗ ${label}:`, result.error.message, result.error.code, result.error.details, result.error.hint);
     return false;
   }
   return true;
@@ -82,6 +82,11 @@ export async function updateLoad(id: string, updates: Partial<StoredLoad>): Prom
   if (updates.pricingRateMax !== undefined) row.pricing_rate_max = updates.pricingRateMax;
   const result = await supabase().from("app_loads").update(row).eq("id", id);
   check(result, "updateLoad");
+}
+
+export async function deleteLoad(id: string): Promise<void> {
+  const result = await supabase().from("app_loads").delete().eq("id", id);
+  check(result, "deleteLoad");
 }
 
 // snake_case DB row → camelCase frontend
@@ -160,6 +165,17 @@ export async function upsertConversation(conv: DbConversation): Promise<void> {
 export async function updateConversation(id: string, updates: Record<string, unknown>): Promise<void> {
   const result = await supabase().from("conversations").update(updates).eq("id", id);
   check(result, "updateConversation");
+}
+
+export async function deleteConversationsByLoad(loadId: string): Promise<void> {
+  // Delete messages for all conversations linked to this load
+  const { data: convs } = await supabase().from("conversations").select("id").eq("load_id", loadId);
+  if (convs && convs.length > 0) {
+    const convIds = convs.map((c: { id: string }) => c.id);
+    await supabase().from("messages").delete().in("conversation_id", convIds);
+  }
+  // Delete the conversations themselves
+  await supabase().from("conversations").delete().eq("load_id", loadId);
 }
 
 function rowToConversation(r: Record<string, unknown>): DbConversation {
@@ -268,7 +284,7 @@ export async function getBookings(): Promise<DbBooking[]> {
 }
 
 export async function insertBooking(b: DbBooking): Promise<void> {
-  const result = await supabase().from("bookings").upsert({
+  const row = {
     id: b.id,
     conv_id: b.convId,
     load_id: b.loadId,
@@ -286,7 +302,8 @@ export async function insertBooking(b: DbBooking): Promise<void> {
     distance_miles: b.distanceMiles,
     shipment_status: b.shipmentStatus,
     created_at: b.createdAt,
-  });
+  };
+  const result = await supabase().from("bookings").upsert(row);
   check(result, "insertBooking");
 }
 

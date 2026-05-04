@@ -221,11 +221,11 @@ export function respondToOffer(
   counterAmount?: number,
   by: "3pl" | "carrier" = "3pl"
 ): void {
-  const conv = getConversations().find((c) => c.id === convId);
+  const convs = getConversations();
+  const conv = convs.find((c) => c.id === convId);
   if (!conv?.offer) return;
   const prevAmount = conv.offer.amount;
 
-  const convs = getConversations();
   const updatedConvs = convs.map((c) => {
     if (c.id !== convId) return c;
     if (action === "countered" && counterAmount) {
@@ -265,11 +265,16 @@ export function respondToOffer(
       offerEvent: { action: "countered", amount: counterAmount, previousAmount: prevAmount },
     });
   } else {
+    const loadRoute = conv.offer?.loadOrigin && conv.offer?.loadDestination
+      ? ` · ${conv.offer.loadOrigin} → ${conv.offer.loadDestination}`
+      : conv.origin && conv.destination
+      ? ` · ${conv.origin} → ${conv.destination}`
+      : "";
     addMessage(convId, {
       sender: by,
       body:
         action === "accepted"
-          ? `Accepted offer of $${prevAmount.toLocaleString()}`
+          ? `Accepted offer of $${prevAmount.toLocaleString()}${loadRoute}`
           : "Declined offer",
       offerEvent: { action, amount: prevAmount },
     });
@@ -308,6 +313,18 @@ export function markConversationRead(
   );
   const update = role === "3pl" ? { unread_broker: 0 } : { unread_carrier: 0 };
   dbUpdateConv(convId, update).catch(console.error);
+}
+
+/** Delete all conversations and their messages for a given load. */
+export function deleteConversationsByLoadId(loadId: string): void {
+  const convs = getConversations();
+  const toDelete = convs.filter((c) => c.loadId === loadId);
+  // Remove messages from sessionStorage
+  toDelete.forEach((c) => {
+    try { sessionStorage.removeItem(`ch_msgs_${c.id}`); } catch {}
+  });
+  // Remove conversations
+  saveConversations(convs.filter((c) => c.loadId !== loadId));
 }
 
 export function getTotalUnread(role: "3pl" | "carrier" = "3pl"): number {

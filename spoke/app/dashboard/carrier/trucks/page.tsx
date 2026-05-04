@@ -22,6 +22,7 @@ import {
   updateDriver,
   deleteTruck,
   getDriverForTruck,
+  syncDriverToBooking,
   type Truck as TruckType,
   type TruckStatus,
   type Driver,
@@ -419,6 +420,7 @@ export default function TrucksPage() {
     patch: Partial<Pick<TruckType, "status" | "city" | "state">>,
     driverIdOverride?: string | null
   ) {
+    const truck = trucks.find((t) => t.id === id);
     if (driverIdOverride !== undefined) {
       // Unassign any driver currently on this truck
       drivers
@@ -427,6 +429,11 @@ export default function TrucksPage() {
       // Assign the new driver if specified
       if (driverIdOverride) {
         updateDriver(driverIdOverride, { assignedTruckId: id });
+      }
+      // Sync driver name to any booking using this truck
+      if (truck) {
+        const newDriver = driverIdOverride ? drivers.find((d) => d.id === driverIdOverride) : null;
+        syncDriverToBooking(truck.truckNum, newDriver?.name ?? "—");
       }
     }
     if (Object.keys(patch).length > 0) {

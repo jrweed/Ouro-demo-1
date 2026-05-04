@@ -308,9 +308,9 @@ export default function CarrierDashboard() {
         />
         <StatCard
           icon={Package}
-          label="Active Loads"
+          label="Active Bookings"
           value={String(activeBookings.length)}
-          sub={activeBookings.length > 0 ? "In progress" : "No active loads"}
+          sub={activeBookings.length > 0 ? "In progress" : "No active bookings"}
           accentClass="bg-[#f0fdf4]"
         />
         <StatCard
@@ -334,7 +334,7 @@ export default function CarrierDashboard() {
         <section className="mb-7">
           <div className="mb-3.5 flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-[18px] font-semibold text-[#111827]">
-              Active Loads
+              Active Bookings
               <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#22c55e] px-1.5 text-xs font-semibold text-white">
                 {activeBookings.length}
               </span>
@@ -354,17 +354,15 @@ export default function CarrierDashboard() {
         </section>
       )}
 
-      {/* Recent messages section */}
-      {convs.length > 0 && (
+      {/* New messages — only show if there are unread conversations */}
+      {convs.filter((c) => (c.unreadCarrier ?? 0) > 0).length > 0 && (
         <section className="mb-7">
           <div className="mb-3.5 flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-[18px] font-semibold text-[#111827]">
-              Recent Messages
-              {totalUnread > 0 && (
-                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#22c55e] px-1.5 text-xs font-semibold text-white">
-                  {totalUnread}
-                </span>
-              )}
+              New Messages
+              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#3b82f6] px-1.5 text-xs font-semibold text-white">
+                {totalUnread}
+              </span>
             </h2>
             <Link
               href="/dashboard/carrier/inbox"
@@ -374,7 +372,7 @@ export default function CarrierDashboard() {
             </Link>
           </div>
           <div className="overflow-hidden rounded-xl border border-[#e5e7eb] bg-white">
-            {convs.slice(0, 3).map((c) => (
+            {convs.filter((c) => (c.unreadCarrier ?? 0) > 0).slice(0, 3).map((c) => (
               <ConvRow key={c.id} conv={c} />
             ))}
           </div>

@@ -33,7 +33,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { useAuth } from "@/hooks/useAuth";
 import dynamic from "next/dynamic";
 import { ensureConversation } from "@/lib/conversations";
-import { getBookings, type Booking, SHIPMENT_STATUS_CONFIG, SHIPMENT_STATUS_ORDER } from "@/lib/bookings";
+import { getBookings, type Booking, type StatusEvent, SHIPMENT_STATUS_CONFIG, SHIPMENT_STATUS_ORDER } from "@/lib/bookings";
 
 const RouteMap = dynamic(
   () => import("@/components/maps/RouteMap").then((m) => m.RouteMap),
@@ -445,6 +445,40 @@ function BookingStatusCard({ booking }: { booking: Booking }) {
           })}
         </div>
       </div>
+
+      {/* Status history */}
+      {(booking.statusHistory?.length ?? 0) > 0 && (
+        <div className="border-t border-[#dcfce7] px-5 py-4">
+          <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-[#9ca3af]">Status History</p>
+          <div className="space-y-0">
+            {(booking.statusHistory ?? []).map((event: StatusEvent, i: number) => {
+              const cfg = SHIPMENT_STATUS_CONFIG[event.status];
+              const isLast = i === (booking.statusHistory?.length ?? 0) - 1;
+              return (
+                <div key={i} className="flex gap-3">
+                  <div className="flex flex-col items-center">
+                    <div
+                      className="h-2.5 w-2.5 rounded-full border-2"
+                      style={{ backgroundColor: cfg.dot, borderColor: cfg.dot }}
+                    />
+                    {!isLast && <div className="w-[2px] flex-1 bg-[#e5e7eb]" />}
+                  </div>
+                  <div className={isLast ? "" : "pb-4"}>
+                    <p className="text-[13px] font-semibold" style={{ color: cfg.color }}>
+                      {event.note || cfg.label}
+                    </p>
+                    <p className="text-[11px] text-[#9ca3af]">
+                      {new Date(event.timestamp).toLocaleString("en-US", {
+                        month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+                      })}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -525,12 +559,12 @@ export default function LoadDetailPage() {
       initials={user.initials}
     >
       {/* Back nav */}
-      <Link
-        href="/dashboard/3pl/loads"
+      <button
+        onClick={() => router.back()}
         className="mb-5 inline-flex items-center gap-1.5 text-sm text-[#6b7280] hover:text-[#374151] transition-colors"
       >
-        <ArrowLeft size={15} /> Back to My Loads
-      </Link>
+        <ArrowLeft size={15} /> Back
+      </button>
 
       {/* Page title row */}
       <div className="mb-6 flex items-start justify-between gap-4">
@@ -713,12 +747,14 @@ export default function LoadDetailPage() {
                   <Package size={13} className="text-[#9ca3af]" /> {load.commodity}
                 </p>
               </div>
+              {load.temperature && (
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-[#9ca3af]">Temperature</p>
                 <p className="mt-0.5 flex items-center gap-1.5 text-sm font-medium text-[#1f2937]">
                   <Thermometer size={13} className="text-[#9ca3af]" /> {load.temperature}°F
                 </p>
               </div>
+              )}
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-[#9ca3af]">Equipment</p>
                 <p className="mt-0.5 flex items-center gap-1.5 text-sm font-medium text-[#1f2937]">

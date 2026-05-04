@@ -67,11 +67,15 @@ export function RouteMap({
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!mapRef.current) return;
+    // Guard against invalid/zero coordinates
+    if (oLat === 0 && oLng === 0 && dLat === 0 && dLng === 0) return;
+    if (!Number.isFinite(oLat) || !Number.isFinite(oLng) || !Number.isFinite(dLat) || !Number.isFinite(dLng)) return;
 
     const resolvedOrigin: [number, number] = [oLat, oLng];
     const resolvedDest: [number, number] = [dLat, dLng];
 
     import("leaflet").then(async (L) => {
+      try {
       // Fix default marker icon path broken by webpack
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -87,12 +91,20 @@ export function RouteMap({
         mapInstanceRef.current = null;
       }
 
-      const bounds = L.latLngBounds([resolvedOrigin, resolvedDest]);
+      // If origin and dest are identical, set a default zoom instead of fitBounds
+      const samePoint = oLat === dLat && oLng === dLng;
       const map = L.map(mapRef.current!, {
         zoomControl: true,
         scrollWheelZoom: false,
         attributionControl: true,
-      }).fitBounds(bounds, { padding: [40, 40] });
+      });
+
+      if (samePoint) {
+        map.setView(resolvedOrigin, 10);
+      } else {
+        const bounds = L.latLngBounds([resolvedOrigin, resolvedDest]);
+        map.fitBounds(bounds, { padding: [40, 40] });
+      }
 
       mapInstanceRef.current = map;
 
@@ -164,8 +176,10 @@ export function RouteMap({
             ([lng, lat]: [number, number]) => [lat, lng]
           );
 
-          L.polyline(coords, { color: "#3b82f6", weight: 4, opacity: 0.85 }).addTo(map);
-          map.fitBounds(L.latLngBounds(coords), { padding: [40, 40] });
+          if (coords.length >= 2) {
+            L.polyline(coords, { color: "#3b82f6", weight: 4, opacity: 0.85 }).addTo(map);
+            map.fitBounds(L.latLngBounds(coords), { padding: [40, 40] });
+          }
 
           onRouteCalcRef.current?.(route.distance / 1609.34, route.duration / 60);
         } else {
@@ -173,12 +187,17 @@ export function RouteMap({
         }
       } catch {
         // Fallback: straight dashed line
-        L.polyline([originCoords, destCoords], {
-          color: "#3b82f6",
-          weight: 3,
-          opacity: 0.7,
-          dashArray: "8, 8",
-        }).addTo(map);
+        if (!samePoint) {
+          L.polyline([resolvedOrigin, resolvedDest], {
+            color: "#3b82f6",
+            weight: 3,
+            opacity: 0.7,
+            dashArray: "8, 8",
+          }).addTo(map);
+        }
+      }
+      } catch (err) {
+        console.warn("[RouteMap] Leaflet init error:", err);
       }
     });
   }, [oLat, oLng, dLat, dLng]);

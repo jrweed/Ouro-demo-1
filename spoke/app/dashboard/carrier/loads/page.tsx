@@ -11,11 +11,13 @@ import {
   Truck,
   MapPin,
   CheckCircle2,
+  ChevronRight,
   FileText,
+  RefreshCw,
   Star,
   Edit2,
   X,
-  ExternalLink,
+  Clock,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { useAuth } from "@/hooks/useAuth";
@@ -23,10 +25,13 @@ import {
   getBookingsByCarrier,
   updateBookingTruck,
   SHIPMENT_STATUS_CONFIG,
+  SHIPMENT_STATUS_ORDER,
   type Booking,
+  type ShipmentStatus,
 } from "@/lib/bookings";
 import { updateConversationTruck } from "@/lib/conversations";
-import { getTrucks, getDrivers, type Truck as TruckData, type Driver } from "@/lib/fleet";
+import { getTrucks, getDrivers, updateTruck, type Truck as TruckData, type Driver } from "@/lib/fleet";
+import { equipmentLabel as equipLabel } from "@/lib/utils/constants";
 
 // ─── Live truck status from ch_trucks ─────────────────────────────────────────
 
@@ -99,7 +104,64 @@ function formatDate(dateStr: string) {
   });
 }
 
-import { equipmentLabel as equipLabel } from "@/lib/utils/constants";
+function formatDatetime(iso: string) {
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+// ─── Status timeline (horizontal progress dots — matches broker) ─────────────
+
+function StatusTimeline({ current }: { current: ShipmentStatus }) {
+  const currentIdx = SHIPMENT_STATUS_ORDER.indexOf(current);
+  return (
+    <div className="flex items-center gap-0">
+      {SHIPMENT_STATUS_ORDER.map((status, i) => {
+        const cfg = SHIPMENT_STATUS_CONFIG[status];
+        const isComplete = i < currentIdx;
+        const isCurrent = i === currentIdx;
+        const isUpcoming = i > currentIdx;
+        return (
+          <div key={status} className="flex items-center">
+            <div className="flex flex-col items-center gap-1">
+              <div
+                className={`flex h-7 w-7 items-center justify-center rounded-full border-2 transition-all ${
+                  isComplete
+                    ? "border-[#22c55e] bg-[#22c55e]"
+                    : isCurrent
+                    ? "border-2 bg-white"
+                    : "border-[#e5e7eb] bg-white"
+                }`}
+                style={isCurrent ? { borderColor: cfg.dot } : {}}
+              >
+                {isComplete ? (
+                  <CheckCircle2 size={14} className="text-white" />
+                ) : (
+                  <span
+                    className="h-2.5 w-2.5 rounded-full"
+                    style={{ backgroundColor: isCurrent ? cfg.dot : "#d1d5db" }}
+                  />
+                )}
+              </div>
+              <span
+                className={`text-center text-[10px] font-medium leading-tight max-w-[68px] ${
+                  isCurrent ? "font-semibold" : isUpcoming ? "text-[#9ca3af]" : "text-[#6b7280]"
+                }`}
+                style={isCurrent ? { color: cfg.color } : {}}
+              >
+                {cfg.label}
+              </span>
+            </div>
+            {i < SHIPMENT_STATUS_ORDER.length - 1 && (
+              <div
+                className="mx-1 mb-4 h-px w-8 shrink-0 transition-all"
+                style={{ backgroundColor: i < currentIdx ? "#22c55e" : "#e5e7eb" }}
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 // ─── Truck picker ─────────────────────────────────────────────────────────────
 
@@ -201,22 +263,36 @@ function TruckPicker({
   );
 }
 
-// ─── Load card ────────────────────────────────────────────────────────────────
+// ─── Status hint for carrier ──────────────────────────────────────────────────
 
-function ActiveLoadCard({
+const STATUS_HINT: Record<ShipmentStatus, string> = {
+  confirmed: "Assign a truck, then set it to \"Loaded\" in My Trucks",
+  pickup_scheduled: "Set your truck to \"In Transit\" in My Trucks when picked up",
+  in_transit: "Set your truck to \"Available\" in My Trucks when delivered",
+  delivered: "",
+};
+
+// ─── Booking card ─────────────────────────────────────────────────────────────
+
+function BookingCard({
   booking,
   liveTrucks,
+  fleetTrucks,
+  fleetDrivers,
   onTruckChange,
 }: {
   booking: Booking;
   liveTrucks: LiveTruck[];
+  fleetTrucks: TruckData[];
+  fleetDrivers: Driver[];
   onTruckChange: (id: string, truckNum: string, driverName: string) => void;
 }) {
   const sc = SHIPMENT_STATUS_CONFIG[booking.shipmentStatus];
+  const isDelivered = booking.shipmentStatus === "delivered";
 
   const [showPicker, setShowPicker] = useState(false);
-  const [allTrucks] = useState<TruckData[]>(() => getTrucks());
-  const [drivers] = useState<Driver[]>(() => getDrivers());
+  const allTrucks = fleetTrucks;
+  const drivers = fleetDrivers;
 
   const currentTruckId = allTrucks.find((t) => t.truckNum === booking.truckNum)?.id ?? null;
   const [selectedId, setSelectedId] = useState<string | null>(() => {
@@ -242,16 +318,18 @@ function ActiveLoadCard({
   }
 
   const hasTruck = booking.truckNum && booking.truckNum !== "—";
-  // Find live truck data for the assigned truck
   const liveTruck = liveTrucks.find((t) => t.truckNum === booking.truckNum) ?? null;
   const truckStatus = liveTruck ? (TRUCK_STATUS_LABELS[liveTruck.status] ?? TRUCK_STATUS_LABELS.inactive) : null;
 
   return (
-    <div className={`rounded-xl border bg-white transition-all ${booking.shipmentStatus === "delivered" ? "border-[#e5e7eb] opacity-75" : "border-[#e5e7eb] shadow-sm"}`}>
+    <div className={`overflow-hidden rounded-xl border bg-white transition-all ${
+      isDelivered ? "border-[#e5e7eb] opacity-75" : "border-[#e5e7eb] shadow-sm"
+    }`}>
       {/* Header */}
-      <div className="flex items-start justify-between gap-4 border-b border-[#f3f4f6] px-5 py-4">
+      <div className="flex items-start justify-between gap-4 px-5 py-4">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px]" style={{ backgroundColor: sc.bg }}>
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px]"
+            style={{ backgroundColor: sc.bg }}>
             <Truck size={18} style={{ color: sc.dot }} />
           </div>
           <div className="min-w-0">
@@ -259,17 +337,16 @@ function ActiveLoadCard({
               <span className="text-[15px] font-bold text-[#111827]">{booking.origin}</span>
               <ArrowRight size={14} className="shrink-0 text-[#9ca3af]" />
               <span className="text-[15px] font-bold text-[#111827]">{booking.destination}</span>
-              {/* Booking status badge — read-only */}
               <span
-                className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                className="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
                 style={{ backgroundColor: sc.bg, color: sc.color }}
               >
                 <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: sc.dot }} />
                 {sc.label}
               </span>
             </div>
-            <p className="mt-0.5 text-[12px] text-[#9ca3af]">
-              Confirmed {new Date(booking.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+            <p className="mt-0.5 text-[12px] text-[#6b7280]">
+              Booked {formatDatetime(booking.createdAt)}
             </p>
           </div>
         </div>
@@ -281,8 +358,13 @@ function ActiveLoadCard({
         </div>
       </div>
 
+      {/* Timeline */}
+      <div className="border-t border-[#f3f4f6] px-5 py-4">
+        <StatusTimeline current={booking.shipmentStatus} />
+      </div>
+
       {/* Assigned truck panel */}
-      <div className="border-b border-[#f3f4f6] px-5 py-4">
+      <div className="border-t border-[#f3f4f6] px-5 py-4">
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-wider text-[#9ca3af]">Assigned Truck</p>
@@ -295,7 +377,6 @@ function ActiveLoadCard({
                   <p className="text-[13px] font-semibold text-[#111827]">Truck {booking.truckNum}</p>
                   <p className="text-[11px] text-[#6b7280]">{booking.driverName}</p>
                 </div>
-                {/* Live truck status badge */}
                 {truckStatus && (
                   <span
                     className="flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold"
@@ -317,15 +398,7 @@ function ActiveLoadCard({
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {hasTruck && liveTruck && (
-              <Link
-                href={`/dashboard/carrier/trucks/${liveTruck.id}`}
-                className="flex items-center gap-1 rounded-lg border border-[#e5e7eb] bg-white px-3 py-1.5 text-[12px] font-medium text-[#374151] hover:bg-[#f9fafb] transition-colors"
-              >
-                <ExternalLink size={11} /> Update status
-              </Link>
-            )}
-            {booking.shipmentStatus !== "delivered" && (
+            {!isDelivered && (
               <button
                 onClick={() => setShowPicker((v) => !v)}
                 className="flex items-center gap-1 rounded-lg border border-[#d1d5db] bg-white px-3 py-1.5 text-[12px] font-medium text-[#374151] hover:bg-[#f9fafb] transition-colors"
@@ -337,54 +410,71 @@ function ActiveLoadCard({
         </div>
       </div>
 
-      {/* Load details */}
-      <div className="flex flex-wrap gap-x-6 gap-y-3 px-5 py-4">
-        {booking.pickupDate && (
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-[#9ca3af]">Pickup Date</p>
-            <p className="mt-0.5 flex items-center gap-1 text-[13px] font-medium text-[#1f2937]">
-              <Calendar size={12} className="text-[#9ca3af]" /> {formatDate(booking.pickupDate)}
-            </p>
-          </div>
-        )}
-        {booking.commodity && (
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-[#9ca3af]">Commodity</p>
-            <p className="mt-0.5 flex items-center gap-1 text-[13px] font-medium text-[#1f2937]">
-              <Package size={12} className="text-[#9ca3af]" /> {booking.commodity}
-            </p>
-          </div>
-        )}
-        {booking.temperature && (
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-[#9ca3af]">Temperature</p>
-            <p className="mt-0.5 text-[13px] font-medium text-[#1f2937]">{booking.temperature}°F</p>
-          </div>
-        )}
-        {booking.equipmentType && (
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-[#9ca3af]">Equipment</p>
-            <p className="mt-0.5 text-[13px] font-medium text-[#1f2937]">{equipLabel(booking.equipmentType)}</p>
-          </div>
-        )}
-        {booking.distanceMiles && (
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-[#9ca3af]">Distance</p>
-            <p className="mt-0.5 flex items-center gap-1 text-[13px] font-medium text-[#1f2937]">
-              <MapPin size={12} className="text-[#9ca3af]" /> {booking.distanceMiles} mi
-            </p>
-          </div>
-        )}
-      </div>
+      {/* Details + footer */}
+      <div className="border-t border-[#f3f4f6] px-5 py-4">
+        <div className="flex flex-wrap gap-x-6 gap-y-3 mb-4">
+          {booking.pickupDate && (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-[#9ca3af]">Pickup Date</p>
+              <p className="mt-0.5 flex items-center gap-1 text-[13px] font-medium text-[#1f2937]">
+                <Calendar size={12} className="text-[#9ca3af]" />
+                {formatDate(booking.pickupDate)}
+              </p>
+            </div>
+          )}
+          {booking.commodity && (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-[#9ca3af]">Commodity</p>
+              <p className="mt-0.5 flex items-center gap-1 text-[13px] font-medium text-[#1f2937]">
+                <Package size={12} className="text-[#9ca3af]" />
+                {booking.commodity}
+              </p>
+            </div>
+          )}
+          {booking.equipmentType && (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-[#9ca3af]">Equipment</p>
+              <p className="mt-0.5 text-[13px] font-medium text-[#1f2937]">{equipLabel(booking.equipmentType)}</p>
+            </div>
+          )}
+          {booking.distanceMiles && (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-[#9ca3af]">Distance</p>
+              <p className="mt-0.5 flex items-center gap-1 text-[13px] font-medium text-[#1f2937]">
+                <MapPin size={12} className="text-[#9ca3af]" />
+                {booking.distanceMiles} mi
+              </p>
+            </div>
+          )}
+        </div>
 
-      {/* Footer */}
-      <div className="flex items-center justify-end border-t border-[#f3f4f6] px-5 py-3">
-        <Link
-          href={`/dashboard/carrier/inbox?conv=${booking.convId}`}
-          className="flex items-center gap-1 text-[12px] font-medium text-[#3b82f6] hover:text-[#2563eb] transition-colors"
-        >
-          Open conversation <ArrowRight size={12} />
-        </Link>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Link
+              href="/dashboard/carrier/trucks"
+              className="flex items-center gap-1 text-[12px] font-medium text-[#3b82f6] hover:text-[#2563eb] transition-colors"
+            >
+              <Truck size={12} /> My Trucks <ChevronRight size={12} />
+            </Link>
+            <span className="text-[#d1d5db]">·</span>
+            <Link
+              href={`/dashboard/carrier/inbox?conv=${booking.convId}`}
+              className="flex items-center gap-1 text-[12px] font-medium text-[#3b82f6] hover:text-[#2563eb] transition-colors"
+            >
+              Conversation <ChevronRight size={12} />
+            </Link>
+          </div>
+          {isDelivered ? (
+            <div className="flex items-center gap-1.5 text-[12px] font-semibold text-[#16a34a]">
+              <CheckCircle2 size={14} /> Delivered
+            </div>
+          ) : (
+            <span className="flex items-center gap-1.5 text-[12px] text-[#6b7280]">
+              <Clock size={13} className="text-[#9ca3af]" />
+              {STATUS_HINT[booking.shipmentStatus]}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Inline truck picker */}
@@ -428,12 +518,16 @@ function ActiveLoadCard({
 
 // ─── Page ──────────────────────────────────────────────────────────────────────
 
-export default function CarrierActiveLoadsPage() {
+type FilterKey = "all" | "active" | "delivered";
+
+export default function CarrierActiveBookingsPage() {
   const router = useRouter();
   const { user, loading } = useAuth();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [liveTrucks, setLiveTrucks] = useState<LiveTruck[]>([]);
-  const [filter, setFilter] = useState<"active" | "all">("active");
+  const [fleetTrucks, setFleetTrucks] = useState<TruckData[]>([]);
+  const [fleetDrivers, setFleetDrivers] = useState<Driver[]>([]);
+  const [filter, setFilter] = useState<FilterKey>("all");
 
   useEffect(() => {
     if (!loading && !user) router.push("/login");
@@ -444,30 +538,68 @@ export default function CarrierActiveLoadsPage() {
     setBookings(getBookingsByCarrier().sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     ));
+    setFleetTrucks(getTrucks());
+    setFleetDrivers(getDrivers());
   }, []);
 
   // Live truck data — refreshes whenever fleet changes
   useEffect(() => {
-    function refresh() { setLiveTrucks(getLiveTrucks()); }
+    function refresh() {
+      setLiveTrucks(getLiveTrucks());
+      setFleetTrucks(getTrucks());
+      setFleetDrivers(getDrivers());
+    }
     refresh();
     window.addEventListener("ch_fleet_updated", refresh);
     return () => window.removeEventListener("ch_fleet_updated", refresh);
   }, []);
 
+  // Refresh bookings when fleet status changes (truck status → booking status auto-sync)
+  useEffect(() => {
+    function onFleetUpdate() {
+      setBookings(getBookingsByCarrier().sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      ));
+    }
+    window.addEventListener("ch_fleet_updated", onFleetUpdate);
+    return () => window.removeEventListener("ch_fleet_updated", onFleetUpdate);
+  }, []);
+
   function handleTruckChange(bookingId: string, truckNum: string, driverName: string) {
+    const oldBooking = bookings.find((b) => b.id === bookingId);
+    if (oldBooking && oldBooking.truckNum && oldBooking.truckNum !== "—") {
+      const oldTruck = fleetTrucks.find((t) => t.truckNum === oldBooking.truckNum);
+      if (oldTruck) updateTruck(oldTruck.id, { status: "available" });
+    }
+    const newTruck = fleetTrucks.find((t) => t.truckNum === truckNum);
+    if (newTruck) updateTruck(newTruck.id, { status: "loaded" });
+
     updateBookingTruck(bookingId, truckNum, driverName);
-    const booking = getBookingsByCarrier().find((b) => b.id === bookingId);
-    if (booking) updateConversationTruck(booking.convId, truckNum, driverName);
+    if (oldBooking) updateConversationTruck(oldBooking.convId, truckNum, driverName);
+
     setBookings(getBookingsByCarrier().sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     ));
+    setFleetTrucks(getTrucks());
+    setFleetDrivers(getDrivers());
+    setLiveTrucks(getLiveTrucks());
+    window.dispatchEvent(new Event("ch_fleet_updated"));
   }
 
-  const filtered = filter === "active"
-    ? bookings.filter((b) => b.shipmentStatus !== "delivered")
-    : bookings;
+  const filtered =
+    filter === "all" ? bookings
+    : filter === "active" ? bookings.filter((b) => b.shipmentStatus !== "delivered")
+    : bookings.filter((b) => b.shipmentStatus === "delivered");
 
-  const activeCount = bookings.filter((b) => b.shipmentStatus !== "delivered").length;
+  const counts = {
+    all: bookings.length,
+    active: bookings.filter((b) => b.shipmentStatus !== "delivered").length,
+    delivered: bookings.filter((b) => b.shipmentStatus === "delivered").length,
+  };
+
+  const totalValue = bookings
+    .filter((b) => b.shipmentStatus !== "delivered")
+    .reduce((s, b) => s + b.acceptedRate, 0);
 
   if (loading || !user) {
     return (
@@ -483,63 +615,71 @@ export default function CarrierActiveLoadsPage() {
         <ArrowLeft size={15} /> Back to Dashboard
       </Link>
 
+      {/* Header */}
       <div className="mb-6 flex items-start justify-between">
         <div>
-          <h1 className="flex items-center gap-2.5 text-[26px] font-bold tracking-tight text-[#111827]">
-            Active Loads
-            {activeCount > 0 && (
-              <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-[#22c55e] px-1.5 text-sm font-semibold text-white">
-                {activeCount}
-              </span>
-            )}
-          </h1>
+          <h1 className="text-[26px] font-bold tracking-tight text-[#111827]">Active Bookings</h1>
           <p className="mt-1 text-sm text-[#6b7280]">Assign trucks to your loads · update truck status in My Trucks</p>
         </div>
-        <Link
-          href="/dashboard/carrier/trucks"
-          className="flex items-center gap-1.5 rounded-lg border border-[#e5e7eb] bg-white px-4 py-2 text-sm font-medium text-[#374151] hover:bg-[#f9fafb] transition-colors"
-        >
-          <Truck size={14} /> My Trucks
-        </Link>
+        {totalValue > 0 && (
+          <div className="text-right">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-[#9ca3af]">Active Value</p>
+            <p className="text-[22px] font-bold tracking-tight text-[#111827]">
+              ${totalValue.toLocaleString()}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Filter tabs */}
       <div className="mb-5 flex gap-1 rounded-xl border border-[#e5e7eb] bg-[#f9fafb] p-1 w-fit">
         {([
-          { key: "active" as const, label: "Active", count: activeCount },
-          { key: "all" as const,    label: "All",    count: bookings.length },
-        ]).map(({ key, label, count }) => (
+          { key: "all" as FilterKey,       label: "All" },
+          { key: "active" as FilterKey,    label: "Active" },
+          { key: "delivered" as FilterKey, label: "Delivered" },
+        ]).map(({ key, label }) => (
           <button key={key} onClick={() => setFilter(key)}
             className={`flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${
               filter === key ? "bg-white text-[#111827] shadow-sm" : "text-[#6b7280] hover:text-[#374151]"
             }`}
           >
             {label}
-            {count > 0 && (
-              <span className={`text-[11px] font-semibold ${filter === key ? "text-[#6b7280]" : "text-[#9ca3af]"}`}>{count}</span>
+            {counts[key] > 0 && (
+              <span className={`text-[11px] font-semibold ${filter === key ? "text-[#6b7280]" : "text-[#9ca3af]"}`}>
+                {counts[key]}
+              </span>
             )}
           </button>
         ))}
       </div>
 
+      {/* Booking list */}
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f3f4f6]">
             <FileText size={24} className="text-[#9ca3af]" />
           </div>
-          <p className="text-sm font-medium text-[#374151]">No active loads</p>
-          <p className="mt-1 text-xs text-[#9ca3af]">Accepted offers from brokers will appear here.</p>
-          <Link href="/dashboard/carrier/inbox" className="mt-4 flex items-center gap-1.5 rounded-lg bg-[#3b82f6] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#2563eb] transition-colors">
-            Open Inbox
-          </Link>
+          <p className="text-sm font-medium text-[#374151]">No bookings yet</p>
+          <p className="mt-1 text-xs text-[#9ca3af]">
+            {filter === "all"
+              ? "Accepted offers from brokers will appear here. Head to your Inbox to negotiate."
+              : "No bookings in this category."}
+          </p>
+          {filter === "all" && (
+            <Link href="/dashboard/carrier/inbox" className="mt-4 flex items-center gap-1.5 rounded-lg bg-[#3b82f6] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#2563eb] transition-colors">
+              Open Inbox
+            </Link>
+          )}
         </div>
       ) : (
         <div className="flex flex-col gap-4">
           {filtered.map((booking) => (
-            <ActiveLoadCard
+            <BookingCard
               key={booking.id}
               booking={booking}
               liveTrucks={liveTrucks}
+              fleetTrucks={fleetTrucks}
+              fleetDrivers={fleetDrivers}
               onTruckChange={handleTruckChange}
             />
           ))}

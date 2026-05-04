@@ -14,7 +14,6 @@ import {
   CheckCircle2,
   ChevronRight,
   FileText,
-  Clock,
   Receipt,
   RefreshCw,
 } from "lucide-react";
@@ -22,7 +21,6 @@ import { AppShell } from "@/components/layout/AppShell";
 import { useAuth } from "@/hooks/useAuth";
 import {
   getBookings,
-  advanceBookingStatus,
   SHIPMENT_STATUS_CONFIG,
   SHIPMENT_STATUS_ORDER,
   type Booking,
@@ -127,17 +125,12 @@ function StatusTimeline({ current }: { current: ShipmentStatus }) {
 function BookingCard({
   booking,
   liveTruck,
-  onAdvance,
 }: {
   booking: Booking;
   liveTruck: LiveTruck | null;
-  onAdvance: (id: string) => void;
 }) {
   const sc = SHIPMENT_STATUS_CONFIG[booking.shipmentStatus];
   const isDelivered = booking.shipmentStatus === "delivered";
-  const currentIdx = SHIPMENT_STATUS_ORDER.indexOf(booking.shipmentStatus);
-  const nextStatus = SHIPMENT_STATUS_ORDER[currentIdx + 1];
-  const nextCfg = nextStatus ? SHIPMENT_STATUS_CONFIG[nextStatus] : null;
 
   return (
     <div className={`overflow-hidden rounded-xl border bg-white transition-all ${
@@ -273,20 +266,15 @@ function BookingCard({
               <Receipt size={12} /> Invoice
             </Link>
           </div>
-          {!isDelivered && nextCfg && (
-            <button
-              onClick={() => onAdvance(booking.id)}
-              className="flex items-center gap-1.5 rounded-lg border border-[#e5e7eb] bg-white px-4 py-2 text-[12px] font-semibold text-[#374151] hover:bg-[#f9fafb] transition-colors"
-              style={{ borderColor: nextCfg.dot + "60" }}
-            >
-              <Clock size={13} style={{ color: nextCfg.dot }} />
-              Mark as {nextCfg.label}
-            </button>
-          )}
-          {isDelivered && (
+          {isDelivered ? (
             <div className="flex items-center gap-1.5 text-[12px] font-semibold text-[#16a34a]">
               <CheckCircle2 size={14} /> Delivered
             </div>
+          ) : (
+            <span className="flex items-center gap-1.5 text-[12px] text-[#6b7280]">
+              <RefreshCw size={11} className="text-[#22c55e]" />
+              Status updates when carrier changes truck status
+            </span>
           )}
         </div>
       </div>
@@ -346,12 +334,16 @@ export default function BookingsPage() {
     return () => window.removeEventListener("ch_fleet_updated", refresh);
   }, []);
 
-  function handleAdvance(bookingId: string) {
-    advanceBookingStatus(bookingId);
-    setBookings(getBookings().sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    ));
-  }
+  // Refresh bookings when fleet status changes (truck status → booking status auto-sync)
+  useEffect(() => {
+    function onFleetUpdate() {
+      setBookings(getBookings().sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      ));
+    }
+    window.addEventListener("ch_fleet_updated", onFleetUpdate);
+    return () => window.removeEventListener("ch_fleet_updated", onFleetUpdate);
+  }, []);
 
   const filtered =
     filter === "all" ? bookings
@@ -445,7 +437,6 @@ export default function BookingsPage() {
               key={booking.id}
               booking={booking}
               liveTruck={liveTrucks.find((t) => t.truckNum === booking.truckNum) ?? null}
-              onAdvance={handleAdvance}
             />
           ))}
         </div>

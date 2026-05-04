@@ -814,7 +814,10 @@ function mergeRequests(real: QuoteRequest[]): QuoteRequest[] {
   // Show real first; append demo items whose IDs don't collide with real
   const realIds = new Set(real.map((r) => r.id));
   const demo = DEMO_REQUESTS.filter((r) => !realIds.has(r.id));
-  return [...real, ...demo];
+  const all = [...real, ...demo];
+  // Sort: new requests first, then quoted, then accepted/declined
+  const ORDER: Record<RequestStatus, number> = { new: 0, quoted: 1, accepted: 2, declined: 3 };
+  return all.sort((a, b) => ORDER[a.status] - ORDER[b.status]);
 }
 
 export default function QuoteRequestsPage() {

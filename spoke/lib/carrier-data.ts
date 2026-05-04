@@ -72,7 +72,7 @@ const KEY_CARRIER_TRUCKS = "ch_carrier_trucks";
 const KEY_REPEAT_BOOKING = "ch_repeat_booking_history";
 const KEY_LANE_HISTORY = "ch_lane_history";
 const KEY_SEED_VERSION = "ch_seed_version";
-const SEED_VERSION = "3"; // Bump this when seed data changes to force re-seed
+const SEED_VERSION = "5"; // Bump this when seed data changes to force re-seed
 
 // ─── Carriers ───────────────────────────────────────────────────────────────
 
@@ -153,11 +153,11 @@ const SEED_CARRIERS: CarrierProfile[] = [
     trailer_type: "carrier_owned",
     haul_preference: "any",
     capabilities: ["food_grade_washout", "temp_logging_continuous", "chain_of_custody"],
-    rating: null,
-    total_loads_completed: 0,
-    on_time_pickup_rate: null,
-    on_time_delivery_rate: null,
-    acceptance_rate: null,
+    rating: 4.7,
+    total_loads_completed: 256,
+    on_time_pickup_rate: 0.93,
+    on_time_delivery_rate: 0.91,
+    acceptance_rate: 0.85,
     quick_pay_required: false,
     created_at: "2026-03-10T08:00:00Z",
   },
@@ -419,35 +419,110 @@ const SEED_CARRIER_TRUCKS: CarrierTruck[] = [
 // ─── Repeat booking history ─────────────────────────────────────────────────
 
 const SEED_REPEAT_BOOKING: RepeatBookingEntry[] = [
-  { carrier_id: "c1000000-0000-0000-0000-000000000001", broker_id: "b1000000-0000-0000-0000-000000000001", completed_loads: 18 },
-  { carrier_id: "c1000000-0000-0000-0000-000000000001", broker_id: "b2000000-0000-0000-0000-000000000002", completed_loads: 4 },
-  { carrier_id: "c2000000-0000-0000-0000-000000000002", broker_id: "b2000000-0000-0000-0000-000000000002", completed_loads: 11 },
-  { carrier_id: "c4000000-0000-0000-0000-000000000004", broker_id: "b2000000-0000-0000-0000-000000000002", completed_loads: 7 },
-  { carrier_id: "c5000000-0000-0000-0000-000000000005", broker_id: "b3000000-0000-0000-0000-000000000003", completed_loads: 3 },
+  { carrier_id: "c1000000-0000-0000-0000-000000000001", broker_id: "b1000000-0000-0000-0000-000000000001", completed_loads: 48 },
+  { carrier_id: "c1000000-0000-0000-0000-000000000001", broker_id: "b2000000-0000-0000-0000-000000000002", completed_loads: 22 },
+  { carrier_id: "c2000000-0000-0000-0000-000000000002", broker_id: "b1000000-0000-0000-0000-000000000001", completed_loads: 35 },
+  { carrier_id: "c2000000-0000-0000-0000-000000000002", broker_id: "b2000000-0000-0000-0000-000000000002", completed_loads: 29 },
+  { carrier_id: "c3000000-0000-0000-0000-000000000003", broker_id: "b1000000-0000-0000-0000-000000000001", completed_loads: 41 },
+  { carrier_id: "c3000000-0000-0000-0000-000000000003", broker_id: "b2000000-0000-0000-0000-000000000002", completed_loads: 26 },
+  { carrier_id: "c4000000-0000-0000-0000-000000000004", broker_id: "b1000000-0000-0000-0000-000000000001", completed_loads: 33 },
+  { carrier_id: "c4000000-0000-0000-0000-000000000004", broker_id: "b2000000-0000-0000-0000-000000000002", completed_loads: 19 },
+  { carrier_id: "c5000000-0000-0000-0000-000000000005", broker_id: "b1000000-0000-0000-0000-000000000001", completed_loads: 25 },
+  { carrier_id: "c5000000-0000-0000-0000-000000000005", broker_id: "b3000000-0000-0000-0000-000000000003", completed_loads: 18 },
+  { carrier_id: "c6000000-0000-0000-0000-000000000006", broker_id: "b1000000-0000-0000-0000-000000000001", completed_loads: 52 },
+  { carrier_id: "c6000000-0000-0000-0000-000000000006", broker_id: "b2000000-0000-0000-0000-000000000002", completed_loads: 38 },
+  { carrier_id: "c7000000-0000-0000-0000-000000000007", broker_id: "b1000000-0000-0000-0000-000000000001", completed_loads: 44 },
+  { carrier_id: "c7000000-0000-0000-0000-000000000007", broker_id: "b2000000-0000-0000-0000-000000000002", completed_loads: 31 },
+  { carrier_id: "c8000000-0000-0000-0000-000000000008", broker_id: "b1000000-0000-0000-0000-000000000001", completed_loads: 58 },
+  { carrier_id: "c8000000-0000-0000-0000-000000000008", broker_id: "b2000000-0000-0000-0000-000000000002", completed_loads: 42 },
+  { carrier_id: "c9000000-0000-0000-0000-000000000009", broker_id: "b1000000-0000-0000-0000-000000000001", completed_loads: 36 },
+  { carrier_id: "c9000000-0000-0000-0000-000000000009", broker_id: "b2000000-0000-0000-0000-000000000002", completed_loads: 22 },
+  { carrier_id: "ca000000-0000-0000-0000-00000000000a", broker_id: "b1000000-0000-0000-0000-000000000001", completed_loads: 45 },
+  { carrier_id: "ca000000-0000-0000-0000-00000000000a", broker_id: "b2000000-0000-0000-0000-000000000002", completed_loads: 33 },
 ];
 
 const SEED_LANE_HISTORY: LaneHistoryEntry[] = [
-  { carrier_id: "c1000000-0000-0000-0000-000000000001", origin_region: "SC", destination_region: "GA", runs: 47 },
-  { carrier_id: "c1000000-0000-0000-0000-000000000001", origin_region: "SC", destination_region: "NC", runs: 38 },
-  { carrier_id: "c1000000-0000-0000-0000-000000000001", origin_region: "SC", destination_region: "FL", runs: 29 },
-  { carrier_id: "c1000000-0000-0000-0000-000000000001", origin_region: "GA", destination_region: "NC", runs: 12 },
-  { carrier_id: "c2000000-0000-0000-0000-000000000002", origin_region: "GA", destination_region: "SC", runs: 34 },
-  { carrier_id: "c2000000-0000-0000-0000-000000000002", origin_region: "GA", destination_region: "FL", runs: 28 },
-  { carrier_id: "c2000000-0000-0000-0000-000000000002", origin_region: "GA", destination_region: "NC", runs: 15 },
-  { carrier_id: "c4000000-0000-0000-0000-000000000004", origin_region: "NC", destination_region: "SC", runs: 28 },
-  { carrier_id: "c4000000-0000-0000-0000-000000000004", origin_region: "NC", destination_region: "GA", runs: 19 },
-  { carrier_id: "c4000000-0000-0000-0000-000000000004", origin_region: "NC", destination_region: "VA", runs: 11 },
-  { carrier_id: "c5000000-0000-0000-0000-000000000005", origin_region: "GA", destination_region: "FL", runs: 14 },
-  { carrier_id: "c5000000-0000-0000-0000-000000000005", origin_region: "GA", destination_region: "SC", runs: 9 },
-  { carrier_id: "c5000000-0000-0000-0000-000000000005", origin_region: "FL", destination_region: "GA", runs: 8 },
+  // c1 — Blue Ridge Reefer (SC)
+  { carrier_id: "c1000000-0000-0000-0000-000000000001", origin_region: "SC", destination_region: "GA", runs: 120 },
+  { carrier_id: "c1000000-0000-0000-0000-000000000001", origin_region: "SC", destination_region: "NC", runs: 95 },
+  { carrier_id: "c1000000-0000-0000-0000-000000000001", origin_region: "SC", destination_region: "FL", runs: 82 },
+  { carrier_id: "c1000000-0000-0000-0000-000000000001", origin_region: "GA", destination_region: "NC", runs: 64 },
+  { carrier_id: "c1000000-0000-0000-0000-000000000001", origin_region: "GA", destination_region: "SC", runs: 78 },
+  { carrier_id: "c1000000-0000-0000-0000-000000000001", origin_region: "NC", destination_region: "FL", runs: 55 },
+  // c2 — Coastal Protein Transport (GA)
+  { carrier_id: "c2000000-0000-0000-0000-000000000002", origin_region: "GA", destination_region: "SC", runs: 105 },
+  { carrier_id: "c2000000-0000-0000-0000-000000000002", origin_region: "GA", destination_region: "FL", runs: 88 },
+  { carrier_id: "c2000000-0000-0000-0000-000000000002", origin_region: "GA", destination_region: "NC", runs: 72 },
+  { carrier_id: "c2000000-0000-0000-0000-000000000002", origin_region: "SC", destination_region: "GA", runs: 91 },
+  { carrier_id: "c2000000-0000-0000-0000-000000000002", origin_region: "FL", destination_region: "GA", runs: 67 },
+  // c3 — Sunbelt Cold Haul (FL)
+  { carrier_id: "c3000000-0000-0000-0000-000000000003", origin_region: "FL", destination_region: "GA", runs: 115 },
+  { carrier_id: "c3000000-0000-0000-0000-000000000003", origin_region: "FL", destination_region: "SC", runs: 89 },
+  { carrier_id: "c3000000-0000-0000-0000-000000000003", origin_region: "FL", destination_region: "NC", runs: 68 },
+  { carrier_id: "c3000000-0000-0000-0000-000000000003", origin_region: "GA", destination_region: "FL", runs: 98 },
+  { carrier_id: "c3000000-0000-0000-0000-000000000003", origin_region: "SC", destination_region: "FL", runs: 74 },
+  // c4 — Piedmont Express (NC)
+  { carrier_id: "c4000000-0000-0000-0000-000000000004", origin_region: "NC", destination_region: "SC", runs: 92 },
+  { carrier_id: "c4000000-0000-0000-0000-000000000004", origin_region: "NC", destination_region: "GA", runs: 78 },
+  { carrier_id: "c4000000-0000-0000-0000-000000000004", origin_region: "NC", destination_region: "VA", runs: 85 },
+  { carrier_id: "c4000000-0000-0000-0000-000000000004", origin_region: "SC", destination_region: "NC", runs: 71 },
+  { carrier_id: "c4000000-0000-0000-0000-000000000004", origin_region: "NC", destination_region: "FL", runs: 56 },
+  // c5 — Magnolia Freight (GA)
+  { carrier_id: "c5000000-0000-0000-0000-000000000005", origin_region: "GA", destination_region: "FL", runs: 82 },
+  { carrier_id: "c5000000-0000-0000-0000-000000000005", origin_region: "GA", destination_region: "SC", runs: 75 },
+  { carrier_id: "c5000000-0000-0000-0000-000000000005", origin_region: "FL", destination_region: "GA", runs: 69 },
+  { carrier_id: "c5000000-0000-0000-0000-000000000005", origin_region: "GA", destination_region: "NC", runs: 58 },
+  // c6 — Volunteer Freight Lines (TN)
+  { carrier_id: "c6000000-0000-0000-0000-000000000006", origin_region: "TN", destination_region: "GA", runs: 135 },
+  { carrier_id: "c6000000-0000-0000-0000-000000000006", origin_region: "TN", destination_region: "SC", runs: 98 },
+  { carrier_id: "c6000000-0000-0000-0000-000000000006", origin_region: "TN", destination_region: "NC", runs: 112 },
+  { carrier_id: "c6000000-0000-0000-0000-000000000006", origin_region: "GA", destination_region: "TN", runs: 105 },
+  { carrier_id: "c6000000-0000-0000-0000-000000000006", origin_region: "TN", destination_region: "FL", runs: 78 },
+  { carrier_id: "c6000000-0000-0000-0000-000000000006", origin_region: "TN", destination_region: "AL", runs: 89 },
+  // c7 — Iron City Flatbed (AL)
+  { carrier_id: "c7000000-0000-0000-0000-000000000007", origin_region: "AL", destination_region: "GA", runs: 118 },
+  { carrier_id: "c7000000-0000-0000-0000-000000000007", origin_region: "AL", destination_region: "TN", runs: 96 },
+  { carrier_id: "c7000000-0000-0000-0000-000000000007", origin_region: "AL", destination_region: "SC", runs: 72 },
+  { carrier_id: "c7000000-0000-0000-0000-000000000007", origin_region: "GA", destination_region: "AL", runs: 88 },
+  { carrier_id: "c7000000-0000-0000-0000-000000000007", origin_region: "AL", destination_region: "FL", runs: 65 },
+  // c8 — Commonwealth Carriers (VA)
+  { carrier_id: "c8000000-0000-0000-0000-000000000008", origin_region: "VA", destination_region: "NC", runs: 142 },
+  { carrier_id: "c8000000-0000-0000-0000-000000000008", origin_region: "VA", destination_region: "SC", runs: 108 },
+  { carrier_id: "c8000000-0000-0000-0000-000000000008", origin_region: "VA", destination_region: "GA", runs: 85 },
+  { carrier_id: "c8000000-0000-0000-0000-000000000008", origin_region: "NC", destination_region: "VA", runs: 125 },
+  { carrier_id: "c8000000-0000-0000-0000-000000000008", origin_region: "NC", destination_region: "FL", runs: 72 },
+  { carrier_id: "c8000000-0000-0000-0000-000000000008", origin_region: "NC", destination_region: "SC", runs: 91 },
+  // c9 — Delta Heavy Haul (MS)
+  { carrier_id: "c9000000-0000-0000-0000-000000000009", origin_region: "MS", destination_region: "GA", runs: 88 },
+  { carrier_id: "c9000000-0000-0000-0000-000000000009", origin_region: "MS", destination_region: "AL", runs: 95 },
+  { carrier_id: "c9000000-0000-0000-0000-000000000009", origin_region: "MS", destination_region: "TN", runs: 78 },
+  { carrier_id: "c9000000-0000-0000-0000-000000000009", origin_region: "GA", destination_region: "MS", runs: 72 },
+  { carrier_id: "c9000000-0000-0000-0000-000000000009", origin_region: "MS", destination_region: "FL", runs: 55 },
+  // c10 — Bayou Express (LA)
+  { carrier_id: "ca000000-0000-0000-0000-00000000000a", origin_region: "LA", destination_region: "GA", runs: 102 },
+  { carrier_id: "ca000000-0000-0000-0000-00000000000a", origin_region: "LA", destination_region: "FL", runs: 118 },
+  { carrier_id: "ca000000-0000-0000-0000-00000000000a", origin_region: "LA", destination_region: "SC", runs: 75 },
+  { carrier_id: "ca000000-0000-0000-0000-00000000000a", origin_region: "FL", destination_region: "LA", runs: 95 },
+  { carrier_id: "ca000000-0000-0000-0000-00000000000a", origin_region: "GA", destination_region: "LA", runs: 82 },
+  { carrier_id: "ca000000-0000-0000-0000-00000000000a", origin_region: "LA", destination_region: "NC", runs: 58 },
 ];
 
 // ─── Accessors ──────────────────────────────────────────────────────────────
 
 export function ensureCarrierData(): void {
   if (typeof window === "undefined") return;
-  // SyncProvider populates these from Supabase on dashboard mount.
-  // Only fall back to hardcoded seeds if Supabase sync hasn't run yet.
+  // Force re-seed when seed version changes
+  const currentVersion = sessionStorage.getItem(KEY_SEED_VERSION);
+  const needsReseed = currentVersion !== SEED_VERSION;
+  if (needsReseed) {
+    sessionStorage.setItem(KEY_CARRIERS, JSON.stringify(SEED_CARRIERS));
+    sessionStorage.setItem(KEY_CARRIER_TRUCKS, JSON.stringify(SEED_CARRIER_TRUCKS));
+    sessionStorage.setItem(KEY_REPEAT_BOOKING, JSON.stringify(SEED_REPEAT_BOOKING));
+    sessionStorage.setItem(KEY_LANE_HISTORY, JSON.stringify(SEED_LANE_HISTORY));
+    sessionStorage.setItem(KEY_SEED_VERSION, SEED_VERSION);
+    return;
+  }
+  // Fall back to seeds if keys are missing (e.g. Supabase sync hasn't run)
   if (!sessionStorage.getItem(KEY_CARRIERS)) {
     sessionStorage.setItem(KEY_CARRIERS, JSON.stringify(SEED_CARRIERS));
   }

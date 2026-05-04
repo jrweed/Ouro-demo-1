@@ -201,12 +201,12 @@ function OfferBanner({
   const canRespond = !isResolved && fromCarrier;
 
   if (isResolved) {
-    return (
+    const content = (
       <div className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium ${
-        offer.status === "accepted" ? "border-[#bbf7d0] bg-[#f0fdf4] text-[#16a34a]" : "border-[#fecaca] bg-[#fef2f2] text-[#dc2626]"
+        offer.status === "accepted" ? "border-[#bbf7d0] bg-[#f0fdf4] text-[#16a34a] hover:bg-[#dcfce7] transition-colors" : "border-[#fecaca] bg-[#fef2f2] text-[#dc2626]"
       }`}>
         {offer.status === "accepted" ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
-        <div>
+        <div className="flex-1">
           <span>{offer.status === "accepted" ? `Offer accepted · $${offer.amount.toLocaleString()}` : "Offer declined"}</span>
           {offer.loadOrigin && (
             <span className="ml-2 text-[12px] opacity-70">
@@ -214,8 +214,13 @@ function OfferBanner({
             </span>
           )}
         </div>
+        {offer.status === "accepted" && <ChevronRight size={16} className="shrink-0 opacity-50" />}
       </div>
     );
+    if (offer.status === "accepted") {
+      return <Link href={`/dashboard/3pl/loads/${conv.loadId}`}>{content}</Link>;
+    }
+    return content;
   }
 
   return (
@@ -289,7 +294,7 @@ function OfferBanner({
 
 // ─── Message bubble ───────────────────────────────────────────────────────────
 
-function MessageBubble({ msg }: { msg: Message }) {
+function MessageBubble({ msg, loadId }: { msg: Message; loadId?: string }) {
   const isBroker = msg.sender === "3pl";
   if (msg.offerEvent) {
     const { action, amount, previousAmount } = msg.offerEvent;
@@ -297,12 +302,22 @@ function MessageBubble({ msg }: { msg: Message }) {
     let color = "text-[#6b7280]";
     if (action === "sent") { text = `${isBroker ? "You" : "Carrier"} sent an offer · $${amount.toLocaleString()}`; color = "text-[#3b82f6]"; }
     else if (action === "countered") { text = `${isBroker ? "You" : "Carrier"} countered $${previousAmount?.toLocaleString()} → $${amount.toLocaleString()}`; color = "text-[#d97706]"; }
-    else if (action === "accepted") { text = `Offer accepted · $${amount.toLocaleString()}`; color = "text-[#16a34a]"; }
+    else if (action === "accepted") { text = msg.body || `Offer accepted · $${amount.toLocaleString()}`; color = "text-[#16a34a]"; }
     else if (action === "declined") { text = "Offer declined"; color = "text-[#dc2626]"; }
+    const isAccepted = action === "accepted";
     return (
       <div className="flex items-center gap-3 py-1">
         <div className="h-px flex-1 bg-[#e5e7eb]" />
-        <span className={`shrink-0 text-[12px] font-medium ${color}`}>{text}</span>
+        {isAccepted && loadId ? (
+          <Link
+            href={`/dashboard/3pl/loads/${loadId}`}
+            className={`shrink-0 text-[12px] font-medium ${color} hover:underline cursor-pointer`}
+          >
+            {text} →
+          </Link>
+        ) : (
+          <span className={`shrink-0 text-[12px] font-medium ${color}`}>{text}</span>
+        )}
         <div className="h-px flex-1 bg-[#e5e7eb]" />
       </div>
     );
@@ -361,9 +376,12 @@ export default function QuoteInboxPage() {
     }
   }, []);
 
-  // Auto-select first conv if none
+  // Auto-select first conv if none (prefer conversations with active negotiations)
   useEffect(() => {
-    if (!activeConvId && convs.length > 0) setActiveConvId(convs[0].id);
+    if (!activeConvId && convs.length > 0) {
+      const active = convs.find((c) => !c.offer || c.offer.status !== "accepted");
+      setActiveConvId(active?.id ?? convs[0].id);
+    }
   }, [convs, activeConvId]);
 
   // Mark as read and scroll when active conv changes
@@ -438,42 +456,55 @@ export default function QuoteInboxPage() {
 
   function handleAcceptOffer() {
     if (!activeConvId) return;
+
+    // Capture conversation and offer BEFORE mutating state
     const conv = getConversations().find((c) => c.id === activeConvId);
-    respondToOffer(activeConvId, "accepted");
-    if (activeConvId) refreshMessages(activeConvId);
+    if (!conv?.offer) return;
+    const offerAmount = conv.offer.amount;
+    const convId = activeConvId;
+
+    respondToOffer(convId, "accepted");
+
+    // Use the offer's loadId (set when selecting a specific load), fall back to conversation loadId
+    const effectiveLoadId = conv.offer.loadId || conv.loadId;
+    const effectiveOrigin = conv.offer.loadOrigin || conv.origin;
+    const effectiveDestination = conv.offer.loadDestination || conv.destination;
+
+    // Create booking BEFORE async refreshes to prevent race conditions
+    let loadExtra: { pickupDate?: string; commodity?: string; temperature?: string; equipmentType?: string; distanceMiles?: number } = {};
+    try {
+      const loads = JSON.parse(sessionStorage.getItem("ch_loads") || "[]");
+      const load = loads.find((l: { id: string }) => l.id === effectiveLoadId);
+      if (load) {
+        loadExtra = {
+          pickupDate: load.pickupDate,
+          commodity: load.commodity,
+          temperature: load.temperature,
+          equipmentType: load.equipmentType,
+          distanceMiles: load.distanceMiles,
+        };
+      }
+    } catch { /* ignore */ }
+
+    createBooking({
+      convId,
+      loadId: effectiveLoadId,
+      carrierId: conv.carrierId,
+      carrierName: conv.carrierName,
+      driverName: conv.driverName,
+      truckNum: conv.truckNum,
+      origin: effectiveOrigin,
+      destination: effectiveDestination,
+      acceptedRate: offerAmount,
+      ...loadExtra,
+    });
+
+    // Async refreshes AFTER booking is safely in sessionStorage
+    refreshMessages(convId);
     refreshConvs();
-    if (conv?.offer) {
-      // Enrich with load data from ch_loads
-      let loadExtra: { pickupDate?: string; commodity?: string; temperature?: string; equipmentType?: string; distanceMiles?: number } = {};
-      try {
-        const loads = JSON.parse(sessionStorage.getItem("ch_loads") || "[]");
-        const load = loads.find((l: { id: string }) => l.id === conv.loadId);
-        if (load) {
-          loadExtra = {
-            pickupDate: load.pickupDate,
-            commodity: load.commodity,
-            temperature: load.temperature,
-            equipmentType: load.equipmentType,
-            distanceMiles: load.distanceMiles,
-          };
-        }
-      } catch { /* ignore */ }
 
-      createBooking({
-        convId: activeConvId,
-        loadId: conv.loadId,
-        carrierId: conv.carrierId,
-        carrierName: conv.carrierName,
-        driverName: conv.driverName,
-        truckNum: conv.truckNum,
-        origin: conv.origin,
-        destination: conv.destination,
-        acceptedRate: conv.offer.amount,
-        ...loadExtra,
-      });
-
-      addNotification({ type: "offer_accepted", title: `Offer accepted · ${conv.carrierName}`, body: `$${conv.offer.amount.toLocaleString()}`, role: "3pl", href: `/dashboard/3pl/quotes?conv=${activeConvId}`, metadata: { carrierId: conv.carrierId, carrierName: conv.carrierName, offeredRate: conv.offer.amount } });
-    }
+    addNotification({ type: "offer_accepted", title: `Offer accepted · ${conv.carrierName}`, body: `$${offerAmount.toLocaleString()}`, role: "3pl", href: `/dashboard/3pl/loads/${effectiveLoadId}`, metadata: { carrierId: conv.carrierId, carrierName: conv.carrierName, offeredRate: offerAmount } });
+    addNotification({ type: "offer_accepted", title: `Booking confirmed`, body: `$${offerAmount.toLocaleString()} · ${effectiveOrigin} → ${effectiveDestination}`, role: "carrier", href: `/dashboard/carrier/loads` });
   }
 
   function handleDeclineOffer() {
@@ -514,7 +545,7 @@ export default function QuoteInboxPage() {
 
       <div className="mb-5 flex items-center justify-between">
         <div>
-          <h1 className="text-[26px] font-bold tracking-tight text-[#111827]">Quote Inbox</h1>
+          <h1 className="text-[26px] font-bold tracking-tight text-[#111827]">Messages</h1>
           <p className="mt-1 text-sm text-[#6b7280]">Manage conversations and offers with carriers</p>
         </div>
         {convs.some((c) => c.unreadBroker > 0) && (
@@ -542,7 +573,13 @@ export default function QuoteInboxPage() {
                 <p className="mt-1 text-xs text-[#9ca3af]">Open a load and click Message on a carrier to start.</p>
               </div>
             ) : (
-              convs.map((conv) => {
+              [...convs].sort((a, b) => {
+                // Sort active conversations before completed ones
+                const aCompleted = a.offer?.status === "accepted" ? 1 : 0;
+                const bCompleted = b.offer?.status === "accepted" ? 1 : 0;
+                if (aCompleted !== bCompleted) return aCompleted - bCompleted;
+                return new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime();
+              }).map((conv) => {
                 const isActive = conv.id === activeConvId;
                 const offerBadge =
                   conv.offer?.status === "accepted" ? { label: "Accepted", color: "#16a34a", bg: "#f0fdf4" }
@@ -617,7 +654,7 @@ export default function QuoteInboxPage() {
                   <p className="text-sm text-[#9ca3af]">No messages yet — say something!</p>
                 </div>
               ) : (
-                messages.map((msg) => <MessageBubble key={msg.id} msg={msg} />)
+                messages.map((msg) => <MessageBubble key={msg.id} msg={msg} loadId={activeConv.loadId} />)
               )}
               <div ref={messagesEndRef} />
             </div>

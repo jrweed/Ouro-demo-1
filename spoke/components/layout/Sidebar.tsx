@@ -25,7 +25,7 @@ const NAV_3PL = [
   { icon: LayoutDashboard, label: "Dashboard",       href: "/dashboard/3pl" },
   { icon: Plus,            label: "Input Load",       href: "/dashboard/3pl/loads/new" },
   { icon: FileText,        label: "My Loads",         href: "/dashboard/3pl/loads" },
-  { icon: Inbox,           label: "Quote Inbox",      href: "/dashboard/3pl/quotes",    badgeKey: "quotes" as const },
+  { icon: MessageSquare,   label: "Messages",          href: "/dashboard/3pl/quotes",    badgeKey: "quotes" as const },
   { icon: BookOpen,        label: "Active Bookings",  href: "/dashboard/3pl/bookings" },
   { icon: Receipt,         label: "Invoices",         href: "/dashboard/3pl/invoices" },
   { icon: BarChart3,       label: "Analytics",        href: "/dashboard/3pl/analytics" },
@@ -37,10 +37,11 @@ const NAV_CARRIER = [
   { icon: LayoutDashboard, label: "Dashboard",       href: "/dashboard/carrier" },
   { icon: Truck,           label: "My Trucks",        href: "/dashboard/carrier/trucks" },
   { icon: Users,           label: "Drivers",          href: "/dashboard/carrier/drivers" },
-  { icon: Inbox,           label: "Quote Requests",   href: "/dashboard/carrier/quote-requests", badgeKey: "quotes" as const },
-  { icon: MessageSquare,   label: "Inbox",            href: "/dashboard/carrier/inbox" },
-  { icon: BookOpen,        label: "Active Loads",     href: "/dashboard/carrier/loads" },
+  { icon: FileText,        label: "Quote Requests",   href: "/dashboard/carrier/quote-requests", badgeKey: "quotes" as const },
+  { icon: MessageSquare,   label: "Messages",         href: "/dashboard/carrier/inbox" },
+  { icon: BookOpen,        label: "Active Bookings",  href: "/dashboard/carrier/loads" },
   { icon: Receipt,         label: "Invoices",         href: "/dashboard/carrier/invoices" },
+  { icon: BarChart3,       label: "Analytics",        href: "/dashboard/carrier/analytics" },
   { icon: Settings,        label: "Settings",         href: "/dashboard/settings" },
 ];
 

@@ -198,7 +198,7 @@ export default function CarrierInvoicesPage() {
             href="/dashboard/carrier/loads"
             className="mt-4 flex items-center gap-1.5 rounded-lg bg-[#3b82f6] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#2563eb] transition-colors"
           >
-            <BookOpen size={15} /> View Active Loads
+            <BookOpen size={15} /> View Active Bookings
           </Link>
         </div>
       ) : (

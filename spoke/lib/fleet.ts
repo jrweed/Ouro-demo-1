@@ -12,6 +12,12 @@ import {
   updateFleetDriver as dbUpdateDriver,
   deleteFleetDriver as dbDeleteDriver,
 } from "./supabase/db";
+import {
+  getBookings,
+  setBookingStatus,
+  updateBookingTruck,
+  type ShipmentStatus,
+} from "./bookings";
 
 export type TruckStatus = (typeof TRUCK_STATUSES)[number];
 export type DriverStatus = "active" | "inactive" | "on_leave";
@@ -213,15 +219,61 @@ export function createTruck(data: Omit<Truck, "id" | "createdAt">): Truck {
   return truck;
 }
 
+/** Map truck status → booking shipment status. */
+const TRUCK_TO_BOOKING_STATUS: Record<string, ShipmentStatus | null> = {
+  loaded: "pickup_scheduled",
+  in_transit: "in_transit",
+  // "available" after "in_transit" means delivered — handled specially below
+};
+
 export function updateTruck(id: string, data: Partial<Omit<Truck, "id" | "createdAt">>): Truck | null {
   const trucks = getTrucks();
   const idx = trucks.findIndex((t) => t.id === id);
   if (idx === -1) return null;
+  const previousStatus = trucks[idx].status;
   const updated = { ...trucks[idx], ...data };
   trucks[idx] = updated;
   saveTrucks(trucks);
   dbUpdateTruck(id, data).catch(console.error);
+
+  // Auto-sync booking status when truck status changes
+  if (data.status && data.status !== previousStatus) {
+    syncBookingStatusFromTruck(updated, previousStatus);
+  }
+
   return updated;
+}
+
+/** When a truck's status changes, update any active booking assigned to it. */
+function syncBookingStatusFromTruck(truck: Truck, previousStatus: TruckStatus): void {
+  const bookings = getBookings();
+  const activeBooking = bookings.find(
+    (b) => b.truckNum === truck.truckNum && b.shipmentStatus !== "delivered"
+  );
+  if (!activeBooking) return;
+
+  const newTruckStatus = truck.status;
+  let newBookingStatus: ShipmentStatus | null = null;
+
+  if (newTruckStatus === "available" && (previousStatus === "in_transit" || previousStatus === "loaded")) {
+    newBookingStatus = "delivered";
+  } else {
+    newBookingStatus = TRUCK_TO_BOOKING_STATUS[newTruckStatus] ?? null;
+  }
+
+  if (newBookingStatus && newBookingStatus !== activeBooking.shipmentStatus) {
+    setBookingStatus(activeBooking.id, newBookingStatus);
+  }
+}
+
+/** When a driver assignment changes on a truck, update any booking using that truck. */
+export function syncDriverToBooking(truckNum: string, driverName: string): void {
+  const bookings = getBookings();
+  const activeBooking = bookings.find(
+    (b) => b.truckNum === truckNum && b.shipmentStatus !== "delivered"
+  );
+  if (!activeBooking) return;
+  updateBookingTruck(activeBooking.id, truckNum, driverName);
 }
 
 export function deleteTruck(id: string): void {

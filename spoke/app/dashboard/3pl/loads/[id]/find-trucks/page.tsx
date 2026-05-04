@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -21,9 +21,10 @@ import {
   Shield,
   XCircle,
   Zap,
+  Save,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
-import { getLoad, updateLoad } from "@/lib/supabase/db";
+import { getLoad, updateLoad, createLoad } from "@/lib/supabase/db";
 import { useAuth } from "@/hooks/useAuth";
 import {
   runMatching,
@@ -305,6 +306,8 @@ export default function FindTrucksPage() {
   const [sortBy, setSortBy] = useState<"score" | "distance" | "rating">("score");
   const [notifyAllLoading, setNotifyAllLoading] = useState(false);
   const [matchingDone, setMatchingDone] = useState(false);
+  const [draftSaved, setDraftSaved] = useState(false);
+  const loadSaved = useRef(false);
 
   useEffect(() => {
     if (!loading && !user) router.push("/login");
@@ -329,7 +332,7 @@ export default function FindTrucksPage() {
     try {
       const loads = JSON.parse(sessionStorage.getItem("ch_loads") || "[]");
       const found = loads.find((l: ActiveLoad) => l.id === id);
-      if (found) { setLoad(found); return; }
+      if (found) { setLoad(found); loadSaved.current = true; setDraftSaved(true); return; }
       const active = sessionStorage.getItem("ch_active_load");
       if (active) { setLoad(JSON.parse(active)); return; }
     } catch { /* ignore */ }
@@ -337,6 +340,7 @@ export default function FindTrucksPage() {
     getLoad(id).then((dbLoad) => {
       if (dbLoad) {
         setLoad({ ...dbLoad, durationMinutes: dbLoad.transitMinutes } as ActiveLoad);
+        loadSaved.current = true; setDraftSaved(true);
       } else {
         setLoad(fallback);
       }
@@ -352,6 +356,39 @@ export default function FindTrucksPage() {
     setRejections(rej);
     setMatchingDone(true);
   }, [load]);
+
+  // Save the load to Supabase + ch_loads (called on first notify or save draft)
+  async function saveLoadToDb(status: string = "active") {
+    if (!load || loadSaved.current) return;
+    loadSaved.current = true;
+    const activeRaw = sessionStorage.getItem("ch_active_load");
+    const activeData = activeRaw ? JSON.parse(activeRaw) : {};
+    await createLoad({
+      id: load.id,
+      status,
+      origin: load.origin,
+      destination: load.destination,
+      pickupDate: load.pickupDate,
+      commodity: load.commodity,
+      temperature: load.temperature,
+      equipmentType: load.equipmentType,
+      weightLbs: String(load.weightLbs || ""),
+      distanceMiles: load.distanceMiles || 0,
+      transitMinutes: activeData.durationMinutes || 0,
+      targetRate: activeData.targetRate || "",
+      pricingRateMin: load.pricingRateMin || 0,
+      pricingRateMax: load.pricingRateMax || 0,
+      createdAt: activeData.createdAt || new Date().toISOString(),
+    }).catch(console.error);
+    // Also add to ch_loads sessionStorage
+    try {
+      const loads = JSON.parse(sessionStorage.getItem("ch_loads") || "[]");
+      if (!loads.find((l: { id: string }) => l.id === load.id)) {
+        loads.unshift({ ...activeData, ...load, status });
+        sessionStorage.setItem("ch_loads", JSON.stringify(loads));
+      }
+    } catch { /* ignore */ }
+  }
 
   // Persist notified carrier state back to ch_loads
   function persistNotifications(updatedCarriers: MatchedCarrier[]) {
@@ -387,6 +424,7 @@ export default function FindTrucksPage() {
   }
 
   function handleNotify(carrierId: string) {
+    saveLoadToDb("carriers_notified").then(() => setDraftSaved(true));
     const now = new Date().toISOString();
     setCarriers((prev) => {
       const updated = prev.map((c) =>
@@ -398,6 +436,8 @@ export default function FindTrucksPage() {
   }
 
   async function handleNotifyAll() {
+    await saveLoadToDb("carriers_notified");
+    setDraftSaved(true);
     setNotifyAllLoading(true);
     await new Promise((r) => setTimeout(r, 400));
     const now = new Date().toISOString();
@@ -443,6 +483,7 @@ export default function FindTrucksPage() {
     >
       {/* Back nav */}
       <Link href="/dashboard/3pl/loads/new"
+        onClick={() => { try { sessionStorage.setItem("ch_load_form_back", "1"); } catch {} }}
         className="mb-5 inline-flex items-center gap-1.5 text-sm text-[#6b7280] hover:text-[#374151] transition-colors"
       >
         <ArrowLeft size={15} /> Back to load details
@@ -480,11 +521,30 @@ export default function FindTrucksPage() {
               <Truck size={12} /> {eqLabel}
             </span>
           </div>
-          <Link href="/dashboard/3pl/loads/new"
-            className="ml-auto text-[13px] font-medium text-[#3b82f6] hover:text-[#2563eb] transition-colors"
-          >
-            Edit load
-          </Link>
+          <div className="ml-auto flex items-center gap-3">
+            {!draftSaved && (
+              <button
+                onClick={async () => {
+                  await saveLoadToDb("active");
+                  setDraftSaved(true);
+                }}
+                className="flex items-center gap-1.5 text-[13px] font-medium text-[#6b7280] hover:text-[#374151] transition-colors"
+              >
+                <Save size={13} /> Save Draft
+              </button>
+            )}
+            {draftSaved && (
+              <span className="flex items-center gap-1.5 text-[13px] font-medium text-[#16a34a]">
+                <CheckCircle2 size={13} /> Draft Saved
+              </span>
+            )}
+            <Link href="/dashboard/3pl/loads/new"
+              onClick={() => { try { sessionStorage.setItem("ch_load_form_back", "1"); } catch {} }}
+              className="text-[13px] font-medium text-[#3b82f6] hover:text-[#2563eb] transition-colors"
+            >
+              Edit load
+            </Link>
+          </div>
         </div>
       </div>
 

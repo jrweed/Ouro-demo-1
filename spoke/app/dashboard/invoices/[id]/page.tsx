@@ -167,9 +167,6 @@ export default function InvoiceDetailPage() {
           <div>
             <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#9ca3af]">Carrier</p>
             <p className="text-[15px] font-semibold text-[#111827]">{invoice.carrierName}</p>
-            <p className="mt-0.5 text-[13px] text-[#6b7280]">
-              Truck {invoice.truckNum} · {invoice.driverName}
-            </p>
           </div>
         </div>
 

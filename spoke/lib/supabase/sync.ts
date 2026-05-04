@@ -39,8 +39,8 @@ export async function syncLoadsFromSupabase(): Promise<void> {
   if (error) { console.error("[sync] loads:", error.message); return; }
   if (!data || data.length === 0) return;
 
-  const loads = data.map((r: Record<string, unknown>) => ({
-    id: r.id,
+  const remote = data.map((r: Record<string, unknown>) => ({
+    id: r.id as string,
     status: r.status || "open",
     origin: r.origin || "",
     destination: r.destination || "",
@@ -56,7 +56,37 @@ export async function syncLoadsFromSupabase(): Promise<void> {
     pricingRateMax: r.pricing_rate_max || 0,
     createdAt: r.created_at || new Date().toISOString(),
   }));
-  sessionStorage.setItem("ch_loads", JSON.stringify(loads));
+
+  // Merge: prefer local loads with fresher status (e.g. "booked" set locally before Supabase roundtrip)
+  let local: Record<string, unknown>[] = [];
+  try { local = JSON.parse(sessionStorage.getItem("ch_loads") || "[]"); } catch { /* ignore */ }
+  const localById = new Map(local.map((l) => [(l as { id: string }).id, l]));
+
+  const merged = remote.map((r) => {
+    const loc = localById.get(r.id) as { status?: string; notifiedCarriers?: unknown[] } | undefined;
+    // Keep local version if it has a more advanced status or extra data (notifiedCarriers)
+    if (loc) {
+      const statusOrder: Record<string, number> = { active: 0, carriers_notified: 1, booked: 2 };
+      const localRank = statusOrder[loc.status ?? ""] ?? -1;
+      const remoteRank = statusOrder[r.status as string] ?? -1;
+      if (localRank > remoteRank) return loc;
+      // Preserve notifiedCarriers from local if remote doesn't have it
+      if (loc.notifiedCarriers && !(r as Record<string, unknown>).notifiedCarriers) {
+        return { ...r, notifiedCarriers: loc.notifiedCarriers };
+      }
+    }
+    return r;
+  });
+
+  // Keep local-only loads not yet in Supabase
+  const remoteIds = new Set(remote.map((r) => r.id));
+  for (const loc of local) {
+    if (!remoteIds.has((loc as { id: string }).id)) {
+      merged.push(loc);
+    }
+  }
+
+  sessionStorage.setItem("ch_loads", JSON.stringify(merged));
 }
 
 // ─── CONVERSATIONS ────────────────────────────────────────────────────────────
@@ -70,8 +100,8 @@ export async function syncConversationsFromSupabase(): Promise<void> {
   if (error) { console.error("[sync] conversations:", error.message); return; }
   if (!data || data.length === 0) return;
 
-  const convs = data.map((r: Record<string, unknown>) => ({
-    id: r.id,
+  const remote = data.map((r: Record<string, unknown>) => ({
+    id: r.id as string,
     loadId: r.load_id,
     carrierId: r.carrier_id,
     carrierName: r.carrier_name,
@@ -85,7 +115,32 @@ export async function syncConversationsFromSupabase(): Promise<void> {
     unreadBroker: r.unread_broker || 0,
     unreadCarrier: r.unread_carrier || 0,
   }));
-  sessionStorage.setItem("ch_conversations", JSON.stringify(convs));
+
+  // Merge: prefer local data when it's newer (avoids Realtime overwriting fresh local state)
+  let local: Record<string, unknown>[] = [];
+  try { local = JSON.parse(sessionStorage.getItem("ch_conversations") || "[]"); } catch { /* ignore */ }
+  const localById = new Map(local.map((c) => [(c as { id: string }).id, c]));
+
+  const merged = remote.map((r) => {
+    const loc = localById.get(r.id) as { lastActivity?: string } | undefined;
+    if (loc?.lastActivity && r.lastActivity) {
+      // Keep whichever is newer
+      if (new Date(loc.lastActivity).getTime() > new Date(r.lastActivity as string).getTime()) {
+        return loc;
+      }
+    }
+    return r;
+  });
+
+  // Also keep any local-only conversations not yet in Supabase
+  const remoteIds = new Set(remote.map((r) => r.id));
+  for (const loc of local) {
+    if (!remoteIds.has((loc as { id: string }).id)) {
+      merged.push(loc);
+    }
+  }
+
+  sessionStorage.setItem("ch_conversations", JSON.stringify(merged));
 }
 
 // ─── MESSAGES ─────────────────────────────────────────────────────────────────
@@ -121,8 +176,8 @@ export async function syncBookingsFromSupabase(): Promise<void> {
   if (error) { console.error("[sync] bookings:", error.message); return; }
   if (!data || data.length === 0) return;
 
-  const bookings = data.map((r: Record<string, unknown>) => ({
-    id: r.id,
+  const remote = data.map((r: Record<string, unknown>) => ({
+    id: r.id as string,
     convId: r.conv_id,
     loadId: r.load_id,
     carrierId: r.carrier_id,
@@ -140,7 +195,15 @@ export async function syncBookingsFromSupabase(): Promise<void> {
     shipmentStatus: r.shipment_status,
     createdAt: r.created_at,
   }));
-  sessionStorage.setItem("ch_bookings", JSON.stringify(bookings));
+
+  // Merge: keep local bookings that aren't in Supabase yet (async write in flight)
+  let local: Record<string, unknown>[] = [];
+  try { local = JSON.parse(sessionStorage.getItem("ch_bookings") || "[]"); } catch { /* ignore */ }
+
+  const remoteIds = new Set(remote.map((b) => b.id));
+  const localOnly = local.filter((b) => !remoteIds.has((b as { id: string }).id));
+
+  sessionStorage.setItem("ch_bookings", JSON.stringify([...localOnly, ...remote]));
 }
 
 // ─── INVOICES ─────────────────────────────────────────────────────────────────

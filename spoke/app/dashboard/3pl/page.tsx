@@ -16,6 +16,7 @@ import {
   XCircle,
   Bell,
   ArrowRight,
+  MessageSquare,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { StatCard } from "@/components/shared/StatCard";
@@ -23,6 +24,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { useAuth } from "@/hooks/useAuth";
 import { getBookings } from "@/lib/bookings";
 import { getNotifications, type AppNotification } from "@/lib/notifications";
+import { getConversations, type Conversation } from "@/lib/conversations";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -38,6 +40,7 @@ interface StoredLoad {
   notifiedCarriers?: { id: string }[];
 }
 
+// StoredConversation used for quick stat calculations (offer filtering)
 interface StoredConversation {
   id: string;
   loadId: string;
@@ -175,6 +178,48 @@ function ActivityItem({ notif }: { notif: AppNotification }) {
   );
 }
 
+function BrokerConvRow({ conv }: { conv: Conversation }) {
+  const hasPendingOffer = conv.offer?.status === "pending" && conv.offer.from === "carrier";
+  return (
+    <div className="flex items-center justify-between border-b border-[#f3f4f6] px-5 py-3.5 last:border-none hover:bg-[#fafafa] transition-colors">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#eff6ff]">
+          <MessageSquare size={15} className="text-[#3b82f6]" />
+        </div>
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 text-[13px] font-semibold text-[#111827]">
+            <span className="truncate">{conv.carrierName}</span>
+            <span className="text-[#9ca3af] font-normal">·</span>
+            <span className="truncate text-[#6b7280] font-normal">{conv.origin}</span>
+            <ArrowRight size={12} className="shrink-0 text-[#9ca3af]" />
+            <span className="truncate text-[#6b7280] font-normal">{conv.destination}</span>
+          </div>
+          <p className="mt-0.5 truncate text-[11px] text-[#6b7280]">{conv.lastMessage || "No messages yet"}</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-3 shrink-0">
+        {hasPendingOffer && (
+          <span className="flex items-center gap-1 rounded-full bg-[#fef9c3] px-2.5 py-1 text-[11px] font-semibold text-[#854d0e]">
+            <DollarSign size={10} /> ${conv.offer!.amount.toLocaleString()} offer
+          </span>
+        )}
+        {conv.unreadBroker > 0 && (
+          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#3b82f6] px-1.5 text-[11px] font-semibold text-white">
+            {conv.unreadBroker}
+          </span>
+        )}
+        <p className="text-[11px] text-[#9ca3af]">{timeAgo(conv.lastActivity)}</p>
+        <Link
+          href={`/dashboard/3pl/quotes?conv=${conv.id}`}
+          className="rounded-md border border-[#d1d5db] px-2.5 py-1 text-xs text-[#4b5563] hover:bg-[#f9fafb] transition-colors"
+        >
+          Open
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ThreePLDashboard() {
@@ -183,6 +228,7 @@ export default function ThreePLDashboard() {
 
   const [loads, setLoads] = useState<StoredLoad[]>([]);
   const [convs, setConvs] = useState<StoredConversation[]>([]);
+  const [recentConvs, setRecentConvs] = useState<Conversation[]>([]);
   const [activity, setActivity] = useState<AppNotification[]>([]);
   const [bookingCount, setBookingCount] = useState(0);
 
@@ -198,6 +244,11 @@ export default function ThreePLDashboard() {
     try {
       setConvs(JSON.parse(sessionStorage.getItem("ch_conversations") || "[]"));
     } catch { /* ignore */ }
+    setRecentConvs(
+      getConversations().sort(
+        (a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime()
+      )
+    );
     setActivity(getNotifications().filter((n) => n.role === "3pl" || n.role === "both").slice(0, 5));
     setBookingCount(getBookings().length);
   }, []);
@@ -236,6 +287,8 @@ export default function ThreePLDashboard() {
   function quoteCountForLoad(loadId: string) {
     return convs.filter((c) => c.loadId === loadId && c.offer !== null).length;
   }
+
+  const totalUnreadBroker = recentConvs.reduce((sum, c) => sum + c.unreadBroker, 0);
 
   // Unread alerts: loads with pending carrier offers
   const pendingCarrierOffers = convs.filter(
@@ -344,6 +397,31 @@ export default function ThreePLDashboard() {
           </div>
         )}
       </section>
+
+      {/* New messages — only show conversations with unread messages */}
+      {recentConvs.filter((c) => c.unreadBroker > 0).length > 0 && (
+        <section className="mb-7">
+          <div className="mb-3.5 flex items-center justify-between">
+            <h2 className="flex items-center gap-2 text-[18px] font-semibold text-[#111827]">
+              New Messages
+              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#3b82f6] px-1.5 text-xs font-semibold text-white">
+                {totalUnreadBroker}
+              </span>
+            </h2>
+            <Link
+              href="/dashboard/3pl/quotes"
+              className="flex items-center gap-1 text-[13px] font-medium text-[#3b82f6] hover:text-[#2563eb] transition-colors"
+            >
+              Open messages <ChevronRight size={14} />
+            </Link>
+          </div>
+          <div className="overflow-hidden rounded-xl border border-[#e5e7eb] bg-white">
+            {recentConvs.filter((c) => c.unreadBroker > 0).slice(0, 3).map((c) => (
+              <BrokerConvRow key={c.id} conv={c} />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Recent activity */}
       <section>
